@@ -350,9 +350,9 @@ SECMOD_SetRootCerts(PK11SlotInfo *slot, SECMODModule *mod) {
 }
 
 static const char* my_shlib_name =
-    SHLIB_PREFIX"nss"SHLIB_VERSION"."SHLIB_SUFFIX;
+    SHLIB_PREFIX"nss"SHLIB_VERSION"k."SHLIB_SUFFIX;
 static const char* softoken_shlib_name =
-    SHLIB_PREFIX"softokn"SOFTOKEN_SHLIB_VERSION"."SHLIB_SUFFIX;
+    SHLIB_PREFIX"softok"SOFTOKEN_SHLIB_VERSION"k."SHLIB_SUFFIX;
 static const PRCallOnceType pristineCallOnce;
 static PRCallOnceType loadSoftokenOnce;
 static PRLibrary* softokenLib;

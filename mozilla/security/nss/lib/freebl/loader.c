@@ -46,7 +46,7 @@
 #include "prenv.h"
 
 static const char* default_name =
-    SHLIB_PREFIX"freebl"SHLIB_VERSION"."SHLIB_SUFFIX;
+    SHLIB_PREFIX"freebl"SHLIB_VERSION"k."SHLIB_SUFFIX;
 
 /* getLibName() returns the name of the library to load. */
 
@@ -135,7 +135,7 @@ static const char * getLibName(void) { return default_name; }
 #include "prsystem.h"
 
 static const char *NameOfThisSharedLib = 
-  SHLIB_PREFIX"softokn"SOFTOKEN_SHLIB_VERSION"."SHLIB_SUFFIX;
+  SHLIB_PREFIX"softok"SOFTOKEN_SHLIB_VERSION"k."SHLIB_SUFFIX;
 
 static PRLibrary* blLib;
 

@@ -484,8 +484,8 @@ SECITEM_ZfreeItem_stub(SECItem *zap, PRBool freeit)
 
 #ifdef FREEBL_NO_WEAK
 
-static const char *nsprLibName = SHLIB_PREFIX"nspr4."SHLIB_SUFFIX;
-static const char *nssutilLibName = SHLIB_PREFIX"nssutil3."SHLIB_SUFFIX;
+static const char *nsprLibName = SHLIB_PREFIX"nspr4k."SHLIB_SUFFIX;
+static const char *nssutilLibName = SHLIB_PREFIX"nssuti3k."SHLIB_SUFFIX;
 
 static SECStatus
 freebl_InitNSPR(void *lib)

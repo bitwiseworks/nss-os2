@@ -448,7 +448,7 @@ int main(int argc, char **argv)
     {
     char *libname = NULL;
     /* Get the platform-dependent library name of the NSS cryptographic module */
-    libname = PR_GetLibraryName(NULL, "softokn3");
+    libname = PR_GetLibraryName(NULL, "softok3k");
     assert(libname != NULL);
     lib = PR_LoadLibrary(libname);
     assert(lib != NULL);

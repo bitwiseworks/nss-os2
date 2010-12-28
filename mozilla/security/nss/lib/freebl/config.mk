@@ -97,13 +97,13 @@ ifdef NS_USE_GCC
 EXTRA_SHARED_LIBS += \
 	-L$(DIST)/lib \
 	-L$(NSSUTIL_LIB_DIR) \
-	-lnssutil3 \
+	-lnssuti3 \
 	-L$(NSPR_LIB_DIR) \
 	-lnspr4 \
 	$(NULL)
 else # ! NS_USE_GCC
 EXTRA_SHARED_LIBS += \
-	$(DIST)/lib/nssutil3.lib \
+	$(DIST)/lib/nssuti3.lib \
 	$(NSPR_LIB_DIR)/$(NSPR31_LIB_PREFIX)nspr4.lib \
 	$(NULL)
 endif # NS_USE_GCC
@@ -117,7 +117,7 @@ else
 EXTRA_SHARED_LIBS += \
 	-L$(DIST)/lib \
 	-L$(NSSUTIL_LIB_DIR) \
-	-lnssutil3 \
+	-lnssuti3 \
 	-L$(NSPR_LIB_DIR) \
 	-lnspr4 \
 	$(NULL)

@@ -45,7 +45,7 @@ XP_DEFINE  += -DXP_PC=1  -DXP_OS2=1
 LIB_PREFIX  = $(NULL)
 
 # Override suffix in suffix.mk
-LIB_SUFFIX  = lib
+LIB_SUFFIX  = a
 # the DLL_SUFFIX must be uppercase for FIPS mode to work. bugzilla 240784
 DLL_SUFFIX  = DLL
 PROG_SUFFIX = .exe
@@ -53,7 +53,7 @@ PROG_SUFFIX = .exe
 
 CCC			= gcc
 LINK			= gcc
-AR                      = emxomfar r $@
+AR                      = ar r $@
 # Keep AR_FLAGS blank so that we do not have to change rules.mk
 AR_FLAGS                = 
 RANLIB 			= @echo OS2 RANLIB
@@ -86,8 +86,7 @@ ifdef MAPFILE
 MKSHLIB += $(MAPFILE)
 endif
 PROCESS_MAP_FILE = \
-	echo LIBRARY $(LIBRARY_NAME)$(LIBRARY_VERSION) INITINSTANCE TERMINSTANCE > $@; \
-	echo PROTMODE >> $@; \
+	echo LIBRARY $(LIBRARY_NAME)$(LIBRARY_VERSION)k INITINSTANCE TERMINSTANCE > $@; \
 	echo CODE    LOADONCALL MOVEABLE DISCARDABLE >> $@; \
 	echo DATA    PRELOAD MOVEABLE MULTIPLE NONSHARED >> $@; \
 	echo EXPORTS >> $@; \
@@ -97,7 +96,7 @@ PROCESS_MAP_FILE = \
 
 endif   #NO_SHARED_LIB
 
-OS_CFLAGS          = -Wall -Wno-unused -Wpointer-arith -Wcast-align -Wno-switch -Zomf -DDEBUG -DTRACING -g
+OS_CFLAGS          = -Wall -Wno-unused -Wpointer-arith -Wcast-align -Wno-switch -DDEBUG -DTRACING -g
 
 ifdef BUILD_OPT
 ifeq (11,$(ALLOW_OPT_CODE_SIZE)$(OPT_CODE_SIZE))
@@ -109,13 +108,14 @@ DEFINES 		+= -UDEBUG -U_DEBUG -DNDEBUG
 DLLFLAGS		= -DLL -OUT:$@ -MAP:$(@:.dll=.map) $(HIGHMEM_LDFLAG)
 EXEFLAGS    		= -PMTYPE:VIO -OUT:$@ -MAP:$(@:.exe=.map) -nologo -NOE $(HIGHMEM_LDFLAG)
 OBJDIR_TAG 		= _OPT
+LDFLAGS 		= $(HIGHMEM_LDFLAG) -Zomf
 else
 #OPTIMIZER		= -O+ -Oi
 DEFINES 		+= -DDEBUG -D_DEBUG -DDEBUGPRINTS     #HCT Need += to avoid overidding manifest.mn 
 DLLFLAGS		= -DEBUG -DLL -OUT:$@ -MAP:$(@:.dll=.map) $(HIGHMEM_LDFLAG)
 EXEFLAGS    		= -DEBUG -PMTYPE:VIO -OUT:$@ -MAP:$(@:.exe=.map) -nologo -NOE $(HIGHMEM_LDFLAG)
 OBJDIR_TAG 		= _DBG
-LDFLAGS 		= -DEBUG $(HIGHMEM_LDFLAG)
+LDFLAGS 		= -DEBUG $(HIGHMEM_LDFLAG) -Zomf
 endif   # BUILD_OPT
 
 # OS/2 use nsinstall that is included in the toolkit.
@@ -183,6 +183,7 @@ endif
 
 
 ifdef LIBRARY_NAME
-    IMPORT_LIBRARY = $(OBJDIR)/$(LIBRARY_NAME)$(LIBRARY_VERSION)$(JDK_DEBUG_SUFFIX).lib
+    IMPORT_LIBRARY = $(OBJDIR)/$(LIBRARY_NAME)$(LIBRARY_VERSION)$(JDK_DEBUG_SUFFIX).a
 endif
 
+ZLIB_LIBS		= -lz

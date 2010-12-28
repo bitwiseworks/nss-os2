@@ -121,7 +121,7 @@ EXTRA_LIBS += \
 	$(DIST)/lib/$(LIB_PREFIX)cryptohi.$(LIB_SUFFIX) \
 	$(DIST)/lib/$(LIB_PREFIX)pk11wrap.$(LIB_SUFFIX) \
 	$(DIST)/lib/$(LIB_PREFIX)certdb.$(LIB_SUFFIX) \
-	$(DIST)/lib/$(LIB_PREFIX)softokn.$(LIB_SUFFIX) \
+	$(DIST)/lib/$(LIB_PREFIX)softok.$(LIB_SUFFIX) \
 	$(CRYPTOLIB) \
 	$(DIST)/lib/$(LIB_PREFIX)nsspki.$(LIB_SUFFIX) \
 	$(DIST)/lib/$(LIB_PREFIX)nssdev.$(LIB_SUFFIX) \
@@ -129,7 +129,7 @@ EXTRA_LIBS += \
 	$(PKIXLIB) \
 	$(DBMLIB) \
 	$(DIST)/lib/$(LIB_PREFIX)$(SQLITE_LIB_NAME).$(LIB_SUFFIX) \
-	$(DIST)/lib/$(LIB_PREFIX)nssutil3.$(LIB_SUFFIX) \
+	$(DIST)/lib/$(LIB_PREFIX)nssuti3.$(LIB_SUFFIX) \
 	$(NSPR_LIB_DIR)/$(NSPR31_LIB_PREFIX)plc4.$(LIB_SUFFIX) \
 	$(NSPR_LIB_DIR)/$(NSPR31_LIB_PREFIX)plds4.$(LIB_SUFFIX) \
 	$(NSPR_LIB_DIR)/$(NSPR31_LIB_PREFIX)nspr4.$(LIB_SUFFIX) \
@@ -156,7 +156,7 @@ EXTRA_LIBS += \
 	$(DIST)/lib/$(LIB_PREFIX)certhi.$(LIB_SUFFIX) \
 	$(DIST)/lib/$(LIB_PREFIX)nsspki.$(LIB_SUFFIX) \
 	$(DIST)/lib/$(LIB_PREFIX)pk11wrap.$(LIB_SUFFIX) \
-	$(DIST)/lib/$(LIB_PREFIX)softokn.$(LIB_SUFFIX) \
+	$(DIST)/lib/$(LIB_PREFIX)softok.$(LIB_SUFFIX) \
 	$(DIST)/lib/$(LIB_PREFIX)certdb.$(LIB_SUFFIX) \
 	$(DIST)/lib/$(LIB_PREFIX)nsspki.$(LIB_SUFFIX) \
 	$(DIST)/lib/$(LIB_PREFIX)nssdev.$(LIB_SUFFIX) \
@@ -179,7 +179,7 @@ EXTRA_SHARED_LIBS += \
 	-L$(DIST)/lib \
 	-l$(SQLITE_LIB_NAME) \
 	-L$(NSSUTIL_LIB_DIR) \
-	-lnssutil3 \
+	-lnssuti3 \
 	-L$(NSPR_LIB_DIR) \
 	-lplc4 \
 	-lplds4 \
@@ -198,7 +198,7 @@ ifeq (,$(filter-out WINNT WINCE,$(OS_ARCH)))
 # $(PROGRAM) has explicit dependencies on $(EXTRA_LIBS)
 EXTRA_LIBS += \
 	$(DIST)/lib/$(LIB_PREFIX)sectool.$(LIB_SUFFIX) \
-	$(DIST)/lib/$(IMPORT_LIB_PREFIX)nssutil3$(IMPORT_LIB_SUFFIX) \
+	$(DIST)/lib/$(IMPORT_LIB_PREFIX)nssuti3$(IMPORT_LIB_SUFFIX) \
 	$(DIST)/lib/$(IMPORT_LIB_PREFIX)smime3$(IMPORT_LIB_SUFFIX) \
 	$(DIST)/lib/$(IMPORT_LIB_PREFIX)ssl3$(IMPORT_LIB_SUFFIX) \
 	$(DIST)/lib/$(IMPORT_LIB_PREFIX)nss3$(IMPORT_LIB_SUFFIX) \
@@ -231,7 +231,7 @@ EXTRA_SHARED_LIBS += \
 	-lsmime3 \
 	-lnss3 \
 	-L$(NSSUTIL_LIB_DIR) \
-	-lnssutil3 \
+	-lnssuti3 \
 	-L$(NSPR_LIB_DIR) \
 	-lplc4 \
 	-lplds4 \

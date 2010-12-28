@@ -42,6 +42,8 @@ EXTRA_LIBS += \
 	$(CRYPTOLIB) \
 	$(NULL)
 
+SHARED_LIBRARY = $(OBJDIR)/$(DLL_PREFIX)softok$(LIBRARY_VERSION)k.$(DLL_SUFFIX)
+
 # can't do this in manifest.mn because OS_TARGET isn't defined there.
 ifeq (,$(filter-out WIN%,$(OS_TARGET)))
 
@@ -57,7 +59,7 @@ EXTRA_SHARED_LIBS += \
 	-L$(DIST)/lib \
 	-l$(SQLITE_LIB_NAME) \
 	-L$(NSSUTIL_LIB_DIR) \
-	-lnssutil3 \
+	-lnssuti3 \
 	-L$(NSPR_LIB_DIR) \
 	-lplc4 \
 	-lplds4 \
@@ -67,7 +69,7 @@ else # ! NS_USE_GCC
 
 EXTRA_SHARED_LIBS += \
 	$(DIST)/lib/$(SQLITE_LIB_NAME).lib \
-	$(NSSUTIL_LIB_DIR)/nssutil3.lib \
+	$(NSSUTIL_LIB_DIR)/nssuti3.lib \
 	$(NSPR_LIB_DIR)/$(NSPR31_LIB_PREFIX)plc4.lib \
 	$(NSPR_LIB_DIR)/$(NSPR31_LIB_PREFIX)plds4.lib \
 	$(NSPR_LIB_DIR)/$(NSPR31_LIB_PREFIX)nspr4.lib \
@@ -82,7 +84,7 @@ EXTRA_SHARED_LIBS += \
 	-L$(DIST)/lib \
 	-l$(SQLITE_LIB_NAME) \
 	-L$(NSSUTIL_LIB_DIR) \
-	-lnssutil3 \
+	-lnssuti3 \
 	-L$(NSPR_LIB_DIR) \
 	-lplc4 \
 	-lplds4 \

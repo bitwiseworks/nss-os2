@@ -102,9 +102,9 @@ CSRCS = \
 MODULE = nss
 
 # don't duplicate module name in REQUIRES
-MAPFILE = $(OBJDIR)/nssutil.def
+MAPFILE = $(OBJDIR)/nssuti.def
 
-LIBRARY_NAME = nssutil
+LIBRARY_NAME = nssuti
 LIBRARY_VERSION = 3
 
 # This part of the code, including all sub-dirs, can be optimized for size

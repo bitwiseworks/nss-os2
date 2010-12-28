@@ -78,10 +78,10 @@ endif
 
 # sign any and all shared libraries that contain the word freebl
 
-CHECKLIBS = $(DIST)/lib/$(DLL_PREFIX)softokn3.$(DLL_SUFFIX)
-CHECKLIBS += $(wildcard $(DIST)/lib/$(DLL_PREFIX)freebl*3.$(DLL_SUFFIX))
+CHECKLIBS = $(DIST)/lib/$(DLL_PREFIX)softok3k.$(DLL_SUFFIX)
+CHECKLIBS += $(wildcard $(DIST)/lib/$(DLL_PREFIX)freebl*3k.$(DLL_SUFFIX))
 ifndef NSS_DISABLE_DBM
-CHECKLIBS += $(DIST)/lib/$(DLL_PREFIX)nssdbm3.$(DLL_SUFFIX)
+CHECKLIBS += $(DIST)/lib/$(DLL_PREFIX)nssdbm3k.$(DLL_SUFFIX)
 endif
 CHECKLOC = $(CHECKLIBS:.$(DLL_SUFFIX)=.chk)
 
@@ -111,7 +111,7 @@ SRCDIR = $(call core_abspath,.)
 
 %.chk: %.$(DLL_SUFFIX) 
 ifeq ($(OS_TARGET), OS2)
-	cd $(OBJDIR) ; cmd.exe /c $(SRCDIR)/sign.cmd $(DIST) \
+	cd $(OBJDIR) ; cmd.exe /c $(SRCDIR)/sign.cmd $(call core_abspath,$(DIST)) \
 	$(call core_abspath,$(OBJDIR)) $(OS_TARGET) \
 	$(call core_abspath,$(NSPR_LIB_DIR)) $(call core_abspath,$<)
 else

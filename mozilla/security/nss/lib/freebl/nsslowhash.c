@@ -218,7 +218,7 @@ freebl_fipsSoftwareIntegrityTest(void)
     CK_RV crv = CKR_OK;
 
     /* make sure that our check file signatures are OK */
-    if (!BLAPI_VerifySelf(SHLIB_PREFIX"freebl"SHLIB_VERSION"."SHLIB_SUFFIX)) {
+    if (!BLAPI_VerifySelf(SHLIB_PREFIX"freebl"SHLIB_VERSION"k."SHLIB_SUFFIX)) {
 	crv = CKR_DEVICE_ERROR; /* better error code? checksum error? */
     }
     return crv;
