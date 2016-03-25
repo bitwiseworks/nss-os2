@@ -1,43 +1,9 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Netscape security libraries.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1994-2000
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
  * Private header defining OCSP types.
- *
- * $Id: ocspti.h,v 1.7 2007/01/09 23:39:08 alexei.volkov.bugs%sun.com Exp $
  */
 
 #ifndef _OCSPTI_H_
@@ -49,7 +15,6 @@
 #include "plarena.h"
 #include "seccomon.h"
 #include "secoidt.h"
-
 
 /*
  * Some notes about naming conventions...
@@ -83,7 +48,6 @@
  * way around (reference before definition).
  */
 
-
 /*
  * Forward-declarations of internal-only data structures.
  *
@@ -101,12 +65,11 @@ typedef struct ocspSingleRequestStr ocspSingleRequest;
 typedef struct ocspSingleResponseStr ocspSingleResponse;
 typedef struct ocspTBSRequestStr ocspTBSRequest;
 
-
 /*
  * An OCSPRequest; this is what is sent (encoded) to an OCSP responder.
  */
 struct CERTOCSPRequestStr {
-    PRArenaPool *arena;			/* local; not part of encoding */
+    PLArenaPool *arena; /* local; not part of encoding */
     ocspTBSRequest *tbsRequest;
     ocspSignature *optionalSignature;
 };
@@ -126,12 +89,12 @@ struct CERTOCSPRequestStr {
  * in-progress extensions as they are optionally added to the request.
  */
 struct ocspTBSRequestStr {
-    SECItem version;			/* an INTEGER */
-    SECItem *derRequestorName;		/* encoded GeneralName; see above */
-    CERTGeneralNameList *requestorName;	/* local; not part of encoding */
+    SECItem version;                    /* an INTEGER */
+    SECItem *derRequestorName;          /* encoded GeneralName; see above */
+    CERTGeneralNameList *requestorName; /* local; not part of encoding */
     ocspSingleRequest **requestList;
     CERTCertExtension **requestExtensions;
-    void *extensionHandle;		/* local; not part of encoding */
+    void *extensionHandle; /* local; not part of encoding */
 };
 
 /*
@@ -158,12 +121,12 @@ struct ocspTBSRequestStr {
  */
 struct ocspSignatureStr {
     SECAlgorithmID signatureAlgorithm;
-    SECItem signature;			/* a BIT STRING */
-    SECItem **derCerts;			/* a SEQUENCE OF Certificate */
-    CERTCertificate *cert;		/* local; not part of encoding */
-    PRBool wasChecked;			/* local; not part of encoding */
-    SECStatus status;			/* local; not part of encoding */
-    int failureReason;			/* local; not part of encoding */
+    SECItem signature;     /* a BIT STRING */
+    SECItem **derCerts;    /* a SEQUENCE OF Certificate */
+    CERTCertificate *cert; /* local; not part of encoding */
+    PRBool wasChecked;     /* local; not part of encoding */
+    SECStatus status;      /* local; not part of encoding */
+    int failureReason;     /* local; not part of encoding */
 };
 
 /*
@@ -174,11 +137,11 @@ struct ocspSignatureStr {
  * but since that seemed confusing (vs. an OCSPRequest) and to be more
  * consistent with the parallel type "SingleResponse", I called it a
  * "SingleRequest".
- * 
+ *
  * XXX figure out how to get rid of that arena -- there must be a way
  */
 struct ocspSingleRequestStr {
-    PRArenaPool *arena;			/* just a copy of the response arena,
+    PLArenaPool *arena; /* just a copy of the response arena,
 					 * needed here for extension handling
 					 * routines, on creation only */
     CERTOCSPCertID *reqCert;
@@ -194,16 +157,16 @@ struct ocspSingleRequestStr {
  */
 struct CERTOCSPCertIDStr {
     SECAlgorithmID hashAlgorithm;
-    SECItem issuerNameHash;		/* an OCTET STRING */
-    SECItem issuerKeyHash;		/* an OCTET STRING */
-    SECItem serialNumber;		/* an INTEGER */
-    SECItem issuerSHA1NameHash;		/* keep other hashes around when */
-    SECItem issuerMD5NameHash;              /* we have them */
+    SECItem issuerNameHash;     /* an OCTET STRING */
+    SECItem issuerKeyHash;      /* an OCTET STRING */
+    SECItem serialNumber;       /* an INTEGER */
+    SECItem issuerSHA1NameHash; /* keep other hashes around when */
+    SECItem issuerMD5NameHash;  /* we have them */
     SECItem issuerMD2NameHash;
-    SECItem issuerSHA1KeyHash;		/* keep other hashes around when */
-    SECItem issuerMD5KeyHash;              /* we have them */
+    SECItem issuerSHA1KeyHash; /* keep other hashes around when */
+    SECItem issuerMD5KeyHash;  /* we have them */
     SECItem issuerMD2KeyHash;
-    PRArenaPool *poolp;
+    PLArenaPool *poolp;
 };
 
 /*
@@ -221,6 +184,7 @@ struct CERTOCSPCertIDStr {
  * }
  */
 typedef enum {
+    ocspResponse_min = 0,
     ocspResponse_successful = 0,
     ocspResponse_malformedRequest = 1,
     ocspResponse_internalError = 2,
@@ -228,7 +192,10 @@ typedef enum {
     ocspResponse_unused = 4,
     ocspResponse_sigRequired = 5,
     ocspResponse_unauthorized = 6,
-    ocspResponse_other			/* unknown/unrecognized value */
+    ocspResponse_max = 6 /* Please update max when adding values.
+                          * Remember to also update arrays, e.g.
+                          * "responseStatusNames" in ocspclnt.c
+                          * and potentially other places. */
 } ocspResponseStatus;
 
 /*
@@ -239,10 +206,10 @@ typedef enum {
  * type ocspResponseStatus.
  */
 struct CERTOCSPResponseStr {
-    PRArenaPool *arena;			/* local; not part of encoding */
-    SECItem responseStatus;		/* an ENUMERATED, see above */
-    ocspResponseStatus statusValue;	/* local; not part of encoding */
-    ocspResponseBytes *responseBytes;	/* only when status is successful */
+    PLArenaPool *arena;               /* local; not part of encoding */
+    SECItem responseStatus;           /* an ENUMERATED, see above */
+    ocspResponseStatus statusValue;   /* local; not part of encoding */
+    ocspResponseBytes *responseBytes; /* only when status is successful */
 };
 
 /*
@@ -260,12 +227,12 @@ struct CERTOCSPResponseStr {
  * response types, just add them to the union.
  */
 struct ocspResponseBytesStr {
-    SECItem responseType;		/* an OBJECT IDENTIFIER */
-    SECOidTag responseTypeTag;		/* local; not part of encoding */
-    SECItem response;			/* an OCTET STRING */
+    SECItem responseType;      /* an OBJECT IDENTIFIER */
+    SECOidTag responseTypeTag; /* local; not part of encoding */
+    SECItem response;          /* an OCTET STRING */
     union {
-	ocspBasicOCSPResponse *basic;	/* when type is id-pkix-ocsp-basic */
-    } decodedResponse;			/* local; not part of encoding */
+        ocspBasicOCSPResponse *basic; /* when type is id-pkix-ocsp-basic */
+    } decodedResponse;                /* local; not part of encoding */
 };
 
 /*
@@ -280,7 +247,7 @@ struct ocspResponseBytesStr {
  */
 struct ocspBasicOCSPResponseStr {
     SECItem tbsResponseDataDER;
-    ocspResponseData *tbsResponseData;	/* "tbs" == To Be Signed */
+    ocspResponseData *tbsResponseData; /* "tbs" == To Be Signed */
     ocspSignature responseSignature;
 };
 
@@ -290,58 +257,38 @@ struct ocspBasicOCSPResponseStr {
  * (a per-certificate status).
  */
 struct ocspResponseDataStr {
-    SECItem version;			/* an INTEGER */
+    SECItem version; /* an INTEGER */
     SECItem derResponderID;
-    ocspResponderID *responderID;	/* local; not part of encoding */
-    SECItem producedAt;			/* a GeneralizedTime */
+    ocspResponderID *responderID; /* local; not part of encoding */
+    SECItem producedAt;           /* a GeneralizedTime */
     CERTOCSPSingleResponse **responses;
     CERTCertExtension **responseExtensions;
 };
 
-/*
- * A ResponderID identifies the responder -- or more correctly, the
- * signer of the response.  The ASN.1 definition of a ResponderID is:
- *
- * ResponderID	::=	CHOICE {
- *	byName			[1] EXPLICIT Name,
- *	byKey			[2] EXPLICIT KeyHash }
- *
- * Because it is CHOICE, the type of identification used and the
- * identification itself are actually encoded together.  To represent
- * this same information internally, we explicitly define a type and
- * save it, along with the value, into a data structure.
- */
-
-typedef enum {
-    ocspResponderID_byName,
-    ocspResponderID_byKey,
-    ocspResponderID_other		/* unknown kind of responderID */
-} ocspResponderIDType;
-
 struct ocspResponderIDStr {
-    ocspResponderIDType responderIDType;/* local; not part of encoding */
+    CERTOCSPResponderIDType responderIDType; /* local; not part of encoding */
     union {
-	CERTName name;			/* when ocspResponderID_byName */
-	SECItem keyHash;		/* when ocspResponderID_byKey */
-	SECItem other;			/* when ocspResponderID_other */
+        CERTName name;   /* when ocspResponderID_byName */
+        SECItem keyHash; /* when ocspResponderID_byKey */
+        SECItem other;   /* when ocspResponderID_other */
     } responderIDValue;
 };
 
 /*
  * The ResponseData in a BasicOCSPResponse contains a SEQUENCE OF
  * SingleResponse -- one for each certificate whose status is being supplied.
- * 
+ *
  * XXX figure out how to get rid of that arena -- there must be a way
  */
 struct CERTOCSPSingleResponseStr {
-    PRArenaPool *arena;			/* just a copy of the response arena,
+    PLArenaPool *arena; /* just a copy of the response arena,
 					 * needed here for extension handling
 					 * routines, on creation only */
     CERTOCSPCertID *certID;
     SECItem derCertStatus;
-    ocspCertStatus *certStatus;		/* local; not part of encoding */
-    SECItem thisUpdate;			/* a GeneralizedTime */
-    SECItem *nextUpdate;		/* a GeneralizedTime */
+    ocspCertStatus *certStatus; /* local; not part of encoding */
+    SECItem thisUpdate;         /* a GeneralizedTime */
+    SECItem *nextUpdate;        /* a GeneralizedTime */
     CERTCertExtension **singleExtensions;
 };
 
@@ -363,10 +310,10 @@ struct CERTOCSPSingleResponseStr {
  */
 
 typedef enum {
-    ocspCertStatus_good,		/* cert is not revoked */
-    ocspCertStatus_revoked,		/* cert is revoked */
-    ocspCertStatus_unknown,		/* cert was unknown to the responder */
-    ocspCertStatus_other		/* status was not an expected value */
+    ocspCertStatus_good,    /* cert is not revoked */
+    ocspCertStatus_revoked, /* cert is revoked */
+    ocspCertStatus_unknown, /* cert was unknown to the responder */
+    ocspCertStatus_other    /* status was not an expected value */
 } ocspCertStatusType;
 
 /*
@@ -377,13 +324,13 @@ typedef enum {
  * gives more detailed information.)
  */
 struct ocspCertStatusStr {
-    ocspCertStatusType certStatusType;	/* local; not part of encoding */
+    ocspCertStatusType certStatusType; /* local; not part of encoding */
     union {
-	SECItem *goodInfo;		/* when ocspCertStatus_good */
-	ocspRevokedInfo *revokedInfo;	/* when ocspCertStatus_revoked */
-	SECItem *unknownInfo;		/* when ocspCertStatus_unknown */
-	SECItem *otherInfo;		/* when ocspCertStatus_other */
-    } certStatusInfo; 
+        SECItem *goodInfo;            /* when ocspCertStatus_good */
+        ocspRevokedInfo *revokedInfo; /* when ocspCertStatus_revoked */
+        SECItem *unknownInfo;         /* when ocspCertStatus_unknown */
+        SECItem *otherInfo;           /* when ocspCertStatus_other */
+    } certStatusInfo;
 };
 
 /*
@@ -391,8 +338,8 @@ struct ocspCertStatusStr {
  * was revoked and why.
  */
 struct ocspRevokedInfoStr {
-    SECItem revocationTime;		/* a GeneralizedTime */
-    SECItem *revocationReason;		/* a CRLReason; ignored for now */
+    SECItem revocationTime;    /* a GeneralizedTime */
+    SECItem *revocationReason; /* a CRLReason; ignored for now */
 };
 
 /*
@@ -403,7 +350,7 @@ struct ocspRevokedInfoStr {
  */
 struct ocspServiceLocatorStr {
     CERTName *issuer;
-    SECItem locator;	/* DER encoded authInfoAccess extension from cert */
+    SECItem locator; /* DER encoded authInfoAccess extension from cert */
 };
 
 #endif /* _OCSPTI_H_ */

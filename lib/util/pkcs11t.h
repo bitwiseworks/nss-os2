@@ -1,39 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Netscape security libraries.
- *
- * The Initial Developer of the Original Code is
- * RSA Security, Inc.
- * Portions created by the Initial Developer are Copyright (C) 1994-2000
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Dr Vipul Gupta <vipul.gupta@sun.com>, Sun Microsystems Laboratories
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 /* License to copy and use this software is granted provided that it is
  * identified as "RSA Security Inc. PKCS #11 Cryptographic Token Interface
  * (Cryptoki)" in all material mentioning or referencing this software.
@@ -857,6 +824,14 @@ typedef CK_ULONG          CK_MECHANISM_TYPE;
 #define CKM_WTLS_SERVER_KEY_AND_MAC_DERIVE  0x000003D4
 #define CKM_WTLS_CLIENT_KEY_AND_MAC_DERIVE  0x000003D5
 
+/* TLS 1.2 mechanisms are new for v2.40 */
+#define CKM_TLS12_MASTER_KEY_DERIVE         0x000003E0
+#define CKM_TLS12_KEY_AND_MAC_DERIVE        0x000003E1
+#define CKM_TLS12_MASTER_KEY_DERIVE_DH      0x000003E2
+#define CKM_TLS12_KEY_SAFE_DERIVE           0x000003E3
+#define CKM_TLS_MAC                         0x000003E4
+#define CKM_TLS_KDF                         0x000003E5
+
 #define CKM_KEY_WRAP_LYNKS             0x00000400
 #define CKM_KEY_WRAP_SET_OAEP          0x00000401
 
@@ -918,6 +893,12 @@ typedef CK_ULONG          CK_MECHANISM_TYPE;
 #define CKM_AES_MAC                    0x00001083
 #define CKM_AES_MAC_GENERAL            0x00001084
 #define CKM_AES_CBC_PAD                0x00001085
+/* new for v2.20 amendment 3 */
+#define CKM_AES_CTR                    0x00001086
+/* new for v2.30 */
+#define CKM_AES_GCM                    0x00001087
+#define CKM_AES_CCM                    0x00001088
+#define CKM_AES_CTS                    0x00001089
 
 /* BlowFish and TwoFish are new for v2.20 */
 #define CKM_BLOWFISH_KEY_GEN           0x00001090
@@ -1302,6 +1283,10 @@ typedef CK_ULONG CK_EC_KDF_TYPE;
 /* The following EC Key Derivation Functions are defined */
 #define CKD_NULL                 0x00000001
 #define CKD_SHA1_KDF             0x00000002
+#define CKD_SHA224_KDF           0x00000005
+#define CKD_SHA256_KDF           0x00000006
+#define CKD_SHA384_KDF           0x00000007
+#define CKD_SHA512_KDF           0x00000008
 
 /* CK_ECDH1_DERIVE_PARAMS is new for v2.11.
  * CK_ECDH1_DERIVE_PARAMS provides the parameters to the
@@ -1518,6 +1503,37 @@ typedef struct CK_AES_CBC_ENCRYPT_DATA_PARAMS {
 
 typedef CK_AES_CBC_ENCRYPT_DATA_PARAMS CK_PTR CK_AES_CBC_ENCRYPT_DATA_PARAMS_PTR;
 
+/* CK_AES_CTR_PARAMS is new for PKCS #11 v2.20 amendment 3 */
+typedef struct CK_AES_CTR_PARAMS {
+  CK_ULONG     ulCounterBits;
+  CK_BYTE      cb[16];
+} CK_AES_CTR_PARAMS;
+
+typedef CK_AES_CTR_PARAMS CK_PTR CK_AES_CTR_PARAMS_PTR;
+
+/* CK_GCM_PARAMS is new for version 2.30 */
+typedef struct CK_GCM_PARAMS {
+  CK_BYTE_PTR  pIv;
+  CK_ULONG     ulIvLen;
+  CK_BYTE_PTR  pAAD;
+  CK_ULONG     ulAADLen;
+  CK_ULONG     ulTagBits;
+} CK_GCM_PARAMS;
+
+typedef CK_GCM_PARAMS CK_PTR CK_GCM_PARAMS_PTR;
+
+/* CK_CCM_PARAMS is new for version 2.30 */
+typedef struct CK_CCM_PARAMS {
+  CK_ULONG     ulDataLen;
+  CK_BYTE_PTR  pNonce;
+  CK_ULONG     ulNonceLen;
+  CK_BYTE_PTR  pAAD;
+  CK_ULONG     ulAADLen;
+  CK_ULONG     ulMACLen;
+} CK_CCM_PARAMS;
+
+typedef CK_CCM_PARAMS CK_PTR CK_CCM_PARAMS_PTR;
+
 /* CK_SKIPJACK_PRIVATE_WRAP_PARAMS provides the parameters to the
  * CKM_SKIPJACK_PRIVATE_WRAP mechanism */
 /* CK_SKIPJACK_PRIVATE_WRAP_PARAMS is new for v2.0 */
@@ -1640,6 +1656,45 @@ typedef struct CK_TLS_PRF_PARAMS {
 
 typedef CK_TLS_PRF_PARAMS CK_PTR CK_TLS_PRF_PARAMS_PTR;
 
+/* TLS 1.2 is new for version 2.40 */
+typedef struct CK_TLS12_MASTER_KEY_DERIVE_PARAMS {
+  CK_SSL3_RANDOM_DATA RandomInfo;
+  CK_VERSION_PTR pVersion;
+  CK_MECHANISM_TYPE prfHashMechanism;
+} CK_TLS12_MASTER_KEY_DERIVE_PARAMS;
+
+typedef CK_TLS12_MASTER_KEY_DERIVE_PARAMS CK_PTR \
+  CK_TLS12_MASTER_KEY_DERIVE_PARAMS_PTR;
+
+typedef struct CK_TLS12_KEY_MAT_PARAMS {
+  CK_ULONG ulMacSizeInBits;
+  CK_ULONG ulKeySizeInBits;
+  CK_ULONG ulIVSizeInBits;
+  CK_BBOOL bIsExport;  /* Unused. Must be set to CK_FALSE. */
+  CK_SSL3_RANDOM_DATA RandomInfo;
+  CK_SSL3_KEY_MAT_OUT_PTR pReturnedKeyMaterial;
+  CK_MECHANISM_TYPE prfHashMechanism;
+} CK_TLS12_KEY_MAT_PARAMS;
+
+typedef CK_TLS12_KEY_MAT_PARAMS CK_PTR CK_TLS12_KEY_MAT_PARAMS_PTR;
+
+typedef struct CK_TLS_KDF_PARAMS {
+  CK_MECHANISM_TYPE prfMechanism;
+  CK_BYTE_PTR pLabel;
+  CK_ULONG ulLabelLength;
+  CK_SSL3_RANDOM_DATA RandomInfo;
+  CK_BYTE_PTR pContextData;
+  CK_ULONG ulContextDataLength;
+} CK_TLS_KDF_PARAMS;
+
+typedef struct CK_TLS_MAC_PARAMS {
+  CK_MECHANISM_TYPE prfMechanism;
+  CK_ULONG ulMacLength;
+  CK_ULONG ulServerOrClient;
+} CK_TLS_MAC_PARAMS;
+
+typedef CK_TLS_MAC_PARAMS CK_PTR CK_TLS_MAC_PARAMS_PTR;
+
 /* WTLS is new for version 2.20 */
 typedef struct CK_WTLS_RANDOM_DATA {
   CK_BYTE_PTR pClientRandom;
@@ -1732,9 +1787,15 @@ typedef CK_ULONG CK_PKCS5_PBKD2_PSEUDO_RANDOM_FUNCTION_TYPE;
 
 typedef CK_PKCS5_PBKD2_PSEUDO_RANDOM_FUNCTION_TYPE CK_PTR CK_PKCS5_PBKD2_PSEUDO_RANDOM_FUNCTION_TYPE_PTR;
 
-/* The following PRFs are defined in PKCS #5 v2.0. */
-#define CKP_PKCS5_PBKD2_HMAC_SHA1 0x00000001
-
+/* The following PRFs are defined in PKCS #5 v2.1. */
+#define CKP_PKCS5_PBKD2_HMAC_SHA1       0x00000001
+#define CKP_PKCS5_PBKD2_HMAC_GOSTR3411  0x00000002
+#define CKP_PKCS5_PBKD2_HMAC_SHA224     0x00000003
+#define CKP_PKCS5_PBKD2_HMAC_SHA256     0x00000004
+#define CKP_PKCS5_PBKD2_HMAC_SHA384     0x00000005
+#define CKP_PKCS5_PBKD2_HMAC_SHA512     0x00000006
+#define CKP_PKCS5_PBKD2_HMAC_SHA512_224 0x00000007
+#define CKP_PKCS5_PBKD2_HMAC_SHA512_256 0x00000008
 
 /* CK_PKCS5_PBKDF2_SALT_SOURCE_TYPE is new for v2.10.
  * CK_PKCS5_PBKDF2_SALT_SOURCE_TYPE is used to indicate the

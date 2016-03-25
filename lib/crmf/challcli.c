@@ -1,39 +1,7 @@
 /* -*- Mode: C; tab-width: 8 -*-*/
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Netscape security libraries.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1994-2000
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "cmmf.h"
 #include "cmmfi.h"
@@ -42,12 +10,12 @@
 #include "secder.h"
 #include "sechash.h"
 
-CMMFPOPODecKeyChallContent*
+CMMFPOPODecKeyChallContent *
 CMMF_CreatePOPODecKeyChallContentFromDER(const char *buf, long len)
 {
-    PRArenaPool                *poolp;
+    PLArenaPool *poolp;
     CMMFPOPODecKeyChallContent *challContent;
-    SECStatus                   rv;
+    SECStatus rv;
 
     poolp = PORT_NewArena(CRMF_DEFAULT_ARENA_SIZE);
     if (poolp == NULL) {
@@ -58,19 +26,19 @@ CMMF_CreatePOPODecKeyChallContentFromDER(const char *buf, long len)
         goto loser;
     }
     challContent->poolp = poolp;
-    rv = SEC_ASN1Decode(poolp, challContent, 
-			CMMFPOPODecKeyChallContentTemplate, buf, len);
+    rv = SEC_ASN1Decode(poolp, challContent,
+                        CMMFPOPODecKeyChallContentTemplate, buf, len);
     if (rv != SECSuccess) {
         goto loser;
     }
     if (challContent->challenges) {
-      while (challContent->challenges[challContent->numChallenges] != NULL) {
-	  challContent->numChallenges++;
-      }
-      challContent->numAllocated = challContent->numChallenges;
+        while (challContent->challenges[challContent->numChallenges] != NULL) {
+            challContent->numChallenges++;
+        }
+        challContent->numAllocated = challContent->numChallenges;
     }
     return challContent;
- loser:
+loser:
     if (poolp != NULL) {
         PORT_FreeArena(poolp, PR_FALSE);
     }
@@ -78,8 +46,7 @@ CMMF_CreatePOPODecKeyChallContentFromDER(const char *buf, long len)
 }
 
 int
-CMMF_POPODecKeyChallContentGetNumChallenges 
-                              (CMMFPOPODecKeyChallContent *inKeyChallCont)
+CMMF_POPODecKeyChallContentGetNumChallenges(CMMFPOPODecKeyChallContent *inKeyChallCont)
 {
     PORT_Assert(inKeyChallCont != NULL);
     if (inKeyChallCont == NULL) {
@@ -88,51 +55,50 @@ CMMF_POPODecKeyChallContentGetNumChallenges
     return inKeyChallCont->numChallenges;
 }
 
-SECItem* 
-CMMF_POPODecKeyChallContentGetPublicValue
-                                   (CMMFPOPODecKeyChallContent *inKeyChallCont,
-				    int                         inIndex)
+SECItem *
+CMMF_POPODecKeyChallContentGetPublicValue(CMMFPOPODecKeyChallContent *inKeyChallCont,
+                                          int inIndex)
 {
     PORT_Assert(inKeyChallCont != NULL);
-    if (inKeyChallCont == NULL || (inIndex > inKeyChallCont->numChallenges-1)||
-	inIndex < 0) {
+    if (inKeyChallCont == NULL || (inIndex > inKeyChallCont->numChallenges - 1) ||
+        inIndex < 0) {
         return NULL;
     }
     return SECITEM_DupItem(&inKeyChallCont->challenges[inIndex]->key);
 }
 
-static SECAlgorithmID*
-cmmf_get_owf(CMMFPOPODecKeyChallContent *inChalCont, 
-	     int                         inIndex)
+static SECAlgorithmID *
+cmmf_get_owf(CMMFPOPODecKeyChallContent *inChalCont,
+             int inIndex)
 {
-   int i;
-   
-   for (i=inIndex; i >= 0; i--) {
-       if (inChalCont->challenges[i]->owf != NULL) {
-	   return inChalCont->challenges[i]->owf;
-       }
-   }
-   return NULL;
+    int i;
+
+    for (i = inIndex; i >= 0; i--) {
+        if (inChalCont->challenges[i]->owf != NULL) {
+            return inChalCont->challenges[i]->owf;
+        }
+    }
+    return NULL;
 }
 
-SECStatus 
+SECStatus
 CMMF_POPODecKeyChallContDecryptChallenge(CMMFPOPODecKeyChallContent *inChalCont,
-					 int                         inIndex,
-					 SECKEYPrivateKey           *inPrivKey)
+                                         int inIndex,
+                                         SECKEYPrivateKey *inPrivKey)
 {
-    CMMFChallenge  *challenge;
-    SECItem        *decryptedRand=NULL;
-    PRArenaPool    *poolp  = NULL;
+    CMMFChallenge *challenge;
+    SECItem *decryptedRand = NULL;
+    PLArenaPool *poolp = NULL;
     SECAlgorithmID *owf;
-    SECStatus       rv     = SECFailure;
-    SECOidTag       tag;
-    CMMFRand        randStr;
-    SECItem         hashItem;
-    unsigned char   hash[HASH_LENGTH_MAX]; 
+    SECStatus rv = SECFailure;
+    SECOidTag tag;
+    CMMFRand randStr;
+    SECItem hashItem;
+    unsigned char hash[HASH_LENGTH_MAX];
 
     PORT_Assert(inChalCont != NULL && inPrivKey != NULL);
-    if (inChalCont == NULL || inIndex <0 || inIndex > inChalCont->numChallenges
-	|| inPrivKey == NULL){
+    if (inChalCont == NULL || inIndex < 0 || inIndex > inChalCont->numChallenges ||
+        inPrivKey == NULL) {
         return SECFailure;
     }
 
@@ -146,21 +112,21 @@ CMMF_POPODecKeyChallContDecryptChallenge(CMMFPOPODecKeyChallContent *inChalCont,
     if (decryptedRand == NULL) {
         goto loser;
     }
-    rv = PK11_PrivDecryptPKCS1(inPrivKey, decryptedRand->data, 
-    			&decryptedRand->len, decryptedRand->len, 
-			challenge->challenge.data, challenge->challenge.len);
+    rv = PK11_PrivDecryptPKCS1(inPrivKey, decryptedRand->data,
+                               &decryptedRand->len, decryptedRand->len,
+                               challenge->challenge.data, challenge->challenge.len);
     if (rv != SECSuccess) {
         goto loser;
     }
 
     rv = SEC_ASN1DecodeItem(poolp, &randStr, CMMFRandTemplate,
-			    decryptedRand); 
+                            decryptedRand);
     if (rv != SECSuccess) {
         goto loser;
     }
     rv = SECFailure; /* Just so that when we do go to loser,
-		      * I won't have to set it again.
-		      */
+                      * I won't have to set it again.
+                      */
     owf = cmmf_get_owf(inChalCont, inIndex);
     if (owf == NULL) {
         /* No hashing algorithm came with the challenges.  Can't verify */
@@ -170,7 +136,7 @@ CMMF_POPODecKeyChallContDecryptChallenge(CMMFPOPODecKeyChallContent *inChalCont,
     tag = SECOID_FindOIDTag(&owf->algorithm);
     hashItem.len = HASH_ResultLenByOidTag(tag);
     if (!hashItem.len)
-        goto loser;	/* error code has been set */
+        goto loser; /* error code has been set */
 
     rv = PK11_HashBuf(tag, hash, randStr.integer.data, randStr.integer.len);
     if (rv != SECSuccess) {
@@ -179,46 +145,44 @@ CMMF_POPODecKeyChallContDecryptChallenge(CMMFPOPODecKeyChallContent *inChalCont,
     hashItem.data = hash;
     if (SECITEM_CompareItem(&hashItem, &challenge->witness) != SECEqual) {
         /* The hash for the data we decrypted doesn't match the hash provided
-	 * in the challenge.  Bail out.
-	 */
-	PORT_SetError(SEC_ERROR_BAD_DATA);
+         * in the challenge.  Bail out.
+         */
+        PORT_SetError(SEC_ERROR_BAD_DATA);
         rv = SECFailure;
-	goto loser;
+        goto loser;
     }
-    rv = PK11_HashBuf(tag, hash, challenge->senderDER.data, 
-		      challenge->senderDER.len);
+    rv = PK11_HashBuf(tag, hash, challenge->senderDER.data,
+                      challenge->senderDER.len);
     if (rv != SECSuccess) {
         goto loser;
     }
     if (SECITEM_CompareItem(&hashItem, &randStr.senderHash) != SECEqual) {
         /* The hash for the data we decrypted doesn't match the hash provided
-	 * in the challenge.  Bail out.
-	 */
-	PORT_SetError(SEC_ERROR_BAD_DATA);
+         * in the challenge.  Bail out.
+         */
+        PORT_SetError(SEC_ERROR_BAD_DATA);
         rv = SECFailure;
-	goto loser;
+        goto loser;
     }
     /* All of the hashes have verified, so we can now store the integer away.*/
     rv = SECITEM_CopyItem(inChalCont->poolp, &challenge->randomNumber,
-			  &randStr.integer);
- loser:
+                          &randStr.integer);
+loser:
     if (poolp) {
-    	PORT_FreeArena(poolp, PR_FALSE);
+        PORT_FreeArena(poolp, PR_FALSE);
     }
     return rv;
 }
 
 SECStatus
-CMMF_POPODecKeyChallContentGetRandomNumber
-                                   (CMMFPOPODecKeyChallContent *inKeyChallCont,
-				    int                          inIndex,
-				    long                        *inDest)
+CMMF_POPODecKeyChallContentGetRandomNumber(CMMFPOPODecKeyChallContent *inKeyChallCont,
+                                           int inIndex,
+                                           long *inDest)
 {
     CMMFChallenge *challenge;
-    
+
     PORT_Assert(inKeyChallCont != NULL);
-    if (inKeyChallCont == NULL || inIndex > 0 || inIndex >= 
-	inKeyChallCont->numChallenges) {
+    if (inKeyChallCont == NULL || inIndex > 0 || inIndex >= inKeyChallCont->numChallenges) {
         return SECFailure;
     }
     challenge = inKeyChallCont->challenges[inIndex];
@@ -230,16 +194,16 @@ CMMF_POPODecKeyChallContentGetRandomNumber
     return (*inDest == -1) ? SECFailure : SECSuccess;
 }
 
-SECStatus 
-CMMF_EncodePOPODecKeyRespContent(long                     *inDecodedRand,
-				 int                       inNumRand,
-				 CRMFEncoderOutputCallback inCallback,
-				 void                     *inArg)
+SECStatus
+CMMF_EncodePOPODecKeyRespContent(long *inDecodedRand,
+                                 int inNumRand,
+                                 CRMFEncoderOutputCallback inCallback,
+                                 void *inArg)
 {
-    PRArenaPool *poolp;
+    PLArenaPool *poolp;
     CMMFPOPODecKeyRespContent *response;
     SECItem *currItem;
-    SECStatus rv=SECFailure;
+    SECStatus rv = SECFailure;
     int i;
 
     poolp = PORT_NewArena(CRMF_DEFAULT_ARENA_SIZE);
@@ -250,23 +214,23 @@ CMMF_EncodePOPODecKeyRespContent(long                     *inDecodedRand,
     if (response == NULL) {
         goto loser;
     }
-    response->responses = PORT_ArenaZNewArray(poolp, SECItem*, inNumRand+1);
+    response->responses = PORT_ArenaZNewArray(poolp, SECItem *, inNumRand + 1);
     if (response->responses == NULL) {
         goto loser;
     }
-    for (i=0; i<inNumRand; i++) {
-        currItem = response->responses[i] = PORT_ArenaZNew(poolp,SECItem);
-	if (currItem == NULL) {
-	    goto loser;
-	}
-	currItem = SEC_ASN1EncodeInteger(poolp, currItem, inDecodedRand[i]);
-	if (currItem == NULL) {
-	    goto loser;
-	}
+    for (i = 0; i < inNumRand; i++) {
+        currItem = response->responses[i] = PORT_ArenaZNew(poolp, SECItem);
+        if (currItem == NULL) {
+            goto loser;
+        }
+        currItem = SEC_ASN1EncodeInteger(poolp, currItem, inDecodedRand[i]);
+        if (currItem == NULL) {
+            goto loser;
+        }
     }
     rv = cmmf_user_encode(response, inCallback, inArg,
-			  CMMFPOPODecKeyRespContentTemplate);
- loser:
+                          CMMFPOPODecKeyRespContentTemplate);
+loser:
     if (poolp != NULL) {
         PORT_FreeArena(poolp, PR_FALSE);
     }

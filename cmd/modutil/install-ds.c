@@ -1,38 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Netscape security libraries.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1994-2000
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "install-ds.h"
 #include <prmem.h>
@@ -225,8 +193,7 @@ Pk11Install_File_Generate(Pk11Install_File* _this,
 					goto loser;
 				}
 				_this->relativePath = PR_Strdup(subval->string);
-				Pk11Install_ListIter_delete(subiter);
-				subiter = NULL;
+				Pk11Install_ListIter_delete(&subiter);
 
 				/* Absolute directory */
 			} else if( !PORT_Strcasecmp(subpair->key, ABSOLUTE_DIR_STRING)) {
@@ -238,28 +205,27 @@ Pk11Install_File_Generate(Pk11Install_File* _this,
 					goto loser;
 				}
 				_this->absolutePath = PR_Strdup(subval->string);
-				Pk11Install_ListIter_delete(subiter);
-				subiter = NULL;
+				Pk11Install_ListIter_delete(&subiter);
 
 			/* file permissions */
 			} else if( !PORT_Strcasecmp(subpair->key,
                                      FILE_PERMISSIONS_STRING)) {
 				subiter = Pk11Install_ListIter_new(subpair->list);
 				subval = subiter->current;
-				if(!subval || (subval->type != STRING_VALUE)){
+				if(!subval || (subval->type != STRING_VALUE) ||
+				   !subval->string || !subval->string[0]){
 					errStr = PR_smprintf(errString[BOGUS_FILE_PERMISSIONS],
                                     _this->jarPath);
 					goto loser;
 				}
 				_this->permissions = (int) strtol(subval->string, &endp, 8);
-				if(*endp != '\0' || subval->string == "\0") {
+				if(*endp != '\0') {
 					errStr = PR_smprintf(errString[BOGUS_FILE_PERMISSIONS],
                                     _this->jarPath);
 					goto loser;
 				}
 				gotPerms = PR_TRUE;
-				Pk11Install_ListIter_delete(subiter);
-				subiter = NULL;
+				Pk11Install_ListIter_delete(&subiter);
 			}
 		} else {
 			if(!PORT_Strcasecmp(val->string, EXECUTABLE_STRING)) {
@@ -291,12 +257,10 @@ Pk11Install_File_Generate(Pk11Install_File* _this,
 
 loser:
 	if(iter) {
-		Pk11Install_ListIter_delete(iter);
-		PR_Free(iter);
+		Pk11Install_ListIter_delete(&iter);
 	}
 	if(subiter) {
-		Pk11Install_ListIter_delete(subiter);
-		PR_Free(subiter);
+		Pk11Install_ListIter_delete(&subiter);
 	}
 	return errStr;
 }
@@ -502,6 +466,9 @@ loser:
 		PR_Free(_this->arch);
 		_this->arch = NULL;
 	}
+	if(copy) {
+		PR_Free(copy);
+	}
 
 	return errStr;
 }
@@ -664,12 +631,15 @@ Pk11Install_PlatformName_GetVerString(Pk11Install_PlatformName* _this)
 void
 Pk11Install_PlatformName_Print(Pk11Install_PlatformName* _this, int pad)
 {
+	char *str = NULL;
 	PAD(pad); printf("OS: %s\n", _this->OS ? _this->OS : "<NULL>");
 	PAD(pad); printf("Digits: ");
 	if(_this->numDigits == 0) {
 		printf("None\n");
 	} else {
-		printf("%s\n", Pk11Install_PlatformName_GetVerString(_this));
+		str = Pk11Install_PlatformName_GetVerString(_this);
+		printf("%s\n", str);
+		PR_Free(str);
 	}
 	PAD(pad); printf("arch: %s\n", _this->arch ? _this->arch : "<NULL>");
 }
@@ -798,9 +768,7 @@ Pk11Install_Platform_Generate(Pk11Install_Platform* _this,
 					goto loser;
 				}
 				_this->moduleFile = PR_Strdup(subval->string);
-				Pk11Install_ListIter_delete(subiter);
-				PR_Free(subiter);
-				subiter = NULL;
+				Pk11Install_ListIter_delete(&subiter);
 				gotModuleFile = PR_TRUE;
 			} else if(!PORT_Strcasecmp(subpair->key, MODULE_NAME_STRING)){
 				if(gotModuleName) {
@@ -816,9 +784,7 @@ Pk11Install_Platform_Generate(Pk11Install_Platform* _this,
 					goto loser;
 				}
 				_this->moduleName = PR_Strdup(subval->string);
-				Pk11Install_ListIter_delete(subiter);
-				PR_Free(subiter);
-				subiter = NULL;
+				Pk11Install_ListIter_delete(&subiter);
 				gotModuleName = PR_TRUE;
 			} else if(!PORT_Strcasecmp(subpair->key, MECH_FLAGS_STRING)) {
 				endptr=NULL;
@@ -841,9 +807,7 @@ Pk11Install_Platform_Generate(Pk11Install_Platform* _this,
                                     Pk11Install_PlatformName_GetString(&_this->name));
 					goto loser;
 				}
-				Pk11Install_ListIter_delete(subiter);
-				PR_Free(subiter);
-				subiter=NULL;
+				Pk11Install_ListIter_delete(&subiter);
 				gotMech = PR_TRUE;
 			} else if(!PORT_Strcasecmp(subpair->key,CIPHER_FLAGS_STRING)) {
 				endptr=NULL;
@@ -866,9 +830,7 @@ Pk11Install_Platform_Generate(Pk11Install_Platform* _this,
                                     Pk11Install_PlatformName_GetString(&_this->name));
 					goto loser;
 				}
-				Pk11Install_ListIter_delete(subiter);
-				PR_Free(subiter);
-				subiter=NULL;
+				Pk11Install_ListIter_delete(&subiter);
 				gotCipher = PR_TRUE;
 			} else if(!PORT_Strcasecmp(subpair->key, FILES_STRING)) {
 				if(gotFiles) {
@@ -1117,9 +1079,7 @@ Pk11Install_Info_Generate(Pk11Install_Info* _this,
 						}
 					}
 				}
-				Pk11Install_ListIter_delete(subiter);
-				PR_Free(subiter);
-				subiter = NULL;
+				Pk11Install_ListIter_delete(&subiter);
 			} else if(!PORT_Strcasecmp(pair->key, PLATFORMS_STRING)) {
 				subiter = Pk11Install_ListIter_new(pair->list);
 				_this->numPlatforms = pair->list->numPairs;
@@ -1137,9 +1097,7 @@ Pk11Install_Info_Generate(Pk11Install_Info* _this,
 						}
 					}
 				}
-				Pk11Install_ListIter_delete(subiter);
-				PR_Free(subiter);
-				subiter = NULL;
+				Pk11Install_ListIter_delete(&subiter);
 			}
 		}
 	}
@@ -1220,14 +1178,10 @@ Pk11Install_Info_Generate(Pk11Install_Info* _this,
 
 loser:
 	if(iter) {
-		Pk11Install_ListIter_delete(iter);
-		PR_Free(iter);
-		iter = NULL;
+		Pk11Install_ListIter_delete(&iter);
 	}
 	if(subiter) {
-		Pk11Install_ListIter_delete(subiter);
-		PR_Free(subiter);
-		subiter = NULL;
+		Pk11Install_ListIter_delete(&subiter);
 	}
 	return errStr;
 }
@@ -1376,10 +1330,12 @@ Pk11Install_ListIter_new(const Pk11Install_ValueList *_list)
 
 /****************************************************************************/
 void
-Pk11Install_ListIter_delete(Pk11Install_ListIter* _this)
+Pk11Install_ListIter_delete(Pk11Install_ListIter** _this)
 {
-	_this->list=NULL;
-	_this->current=NULL;
+	(*_this)->list=NULL;
+	(*_this)->current=NULL;
+	PR_Free(*_this);
+	*_this=NULL;
 }
 
 /****************************************************************************/
@@ -1498,7 +1454,6 @@ Pk11Install_Pair_delete(Pk11Install_Pair* _this)
 {
 	PR_Free(_this->key);
 	Pk11Install_ValueList_delete(_this->list);
-	PR_Free(_this->list);
 }
 
 /*************************************************************************/

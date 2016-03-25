@@ -1,53 +1,18 @@
-/* 
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the elliptic curve math library for prime field curves.
- *
- * The Initial Developer of the Original Code is
- * Sun Microsystems, Inc.
- * Portions created by the Initial Developer are Copyright (C) 2003
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Douglas Stebila <douglas@stebila.ca>, Sun Microsystems Laboratories
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "ecp.h"
 #include "mpi.h"
 #include "mplogic.h"
 #include "mpi-priv.h"
-#include <stdlib.h>
 
 #define ECP224_DIGITS ECL_CURVE_DIGITS(224)
 
 /* Fast modular reduction for p224 = 2^224 - 2^96 + 1.  a can be r. Uses
  * algorithm 7 from Brown, Hankerson, Lopez, Menezes. Software
  * Implementation of the NIST Elliptic Curves over Prime Fields. */
-mp_err
+static mp_err
 ec_GFp_nistp224_mod(const mp_int *a, mp_int *r, const GFMethod *meth)
 {
 	mp_err res = MP_OKAY;
@@ -57,7 +22,7 @@ ec_GFp_nistp224_mod(const mp_int *a, mp_int *r, const GFMethod *meth)
 	mp_digit carry;
 #ifdef ECL_THIRTY_TWO_BIT
         mp_digit a6a = 0, a6b = 0,
-                a5a = 0, a5b = 0, a4a = 0, a4b = 0, a3a = 0, a3b = 0;
+                a5a = 0, a5b = 0, a4a = 0, a4b = 0, a3b = 0;
         mp_digit r0a, r0b, r1a, r1b, r2a, r2b, r3a;
 #else
 	mp_digit a6 = 0, a5 = 0, a4 = 0, a3b = 0, a5a = 0;
@@ -107,52 +72,54 @@ ec_GFp_nistp224_mod(const mp_int *a, mp_int *r, const GFMethod *meth)
 			+(  0, a6,a5b,  0)
 			-(  0	 0,    0|a6b, a6a|a5b )
 			-(  a6b, a6a|a5b, a5a|a4b, a4a|a3b ) */
-		MP_ADD_CARRY (r1b, a3b, r1b, 0,     carry);
-		MP_ADD_CARRY (r2a, a4a, r2a, carry, carry);
-		MP_ADD_CARRY (r2b, a4b, r2b, carry, carry);
-		MP_ADD_CARRY (r3a, a5a, r3a, carry, carry);
-		r3b = carry;
-		MP_ADD_CARRY (r1b, a5b, r1b, 0,     carry);
-		MP_ADD_CARRY (r2a, a6a, r2a, carry, carry);
-		MP_ADD_CARRY (r2b, a6b, r2b, carry, carry);
-		MP_ADD_CARRY (r3a,   0, r3a, carry, carry);
-		r3b += carry;
-		MP_SUB_BORROW(r0a, a3b, r0a, 0,     carry);
-		MP_SUB_BORROW(r0b, a4a, r0b, carry, carry);
-		MP_SUB_BORROW(r1a, a4b, r1a, carry, carry);
-		MP_SUB_BORROW(r1b, a5a, r1b, carry, carry);
-		MP_SUB_BORROW(r2a, a5b, r2a, carry, carry);
-		MP_SUB_BORROW(r2b, a6a, r2b, carry, carry);
-		MP_SUB_BORROW(r3a, a6b, r3a, carry, carry);
-		r3b -= carry;
-		MP_SUB_BORROW(r0a, a5b, r0a, 0,     carry);
-		MP_SUB_BORROW(r0b, a6a, r0b, carry, carry);
-		MP_SUB_BORROW(r1a, a6b, r1a, carry, carry);
+                carry = 0;
+		MP_ADD_CARRY (r1b, a3b, r1b, carry);
+		MP_ADD_CARRY (r2a, a4a, r2a, carry);
+		MP_ADD_CARRY (r2b, a4b, r2b, carry);
+		MP_ADD_CARRY (r3a, a5a, r3a, carry);
+		r3b = carry; carry = 0;
+		MP_ADD_CARRY (r1b, a5b, r1b, carry);
+		MP_ADD_CARRY (r2a, a6a, r2a, carry);
+		MP_ADD_CARRY (r2b, a6b, r2b, carry);
+		MP_ADD_CARRY (r3a,   0, r3a, carry);
+		r3b += carry; carry = 0;
+		MP_SUB_BORROW(r0a, a3b, r0a, carry);
+		MP_SUB_BORROW(r0b, a4a, r0b, carry);
+		MP_SUB_BORROW(r1a, a4b, r1a, carry);
+		MP_SUB_BORROW(r1b, a5a, r1b, carry);
+		MP_SUB_BORROW(r2a, a5b, r2a, carry);
+		MP_SUB_BORROW(r2b, a6a, r2b, carry);
+		MP_SUB_BORROW(r3a, a6b, r3a, carry);
+		r3b -= carry; carry = 0;
+		MP_SUB_BORROW(r0a, a5b, r0a, carry);
+		MP_SUB_BORROW(r0b, a6a, r0b, carry);
+		MP_SUB_BORROW(r1a, a6b, r1a, carry);
 		if (carry) {
-			MP_SUB_BORROW(r1b, 0, r1b, carry, carry);
-			MP_SUB_BORROW(r2a, 0, r2a, carry, carry);
-			MP_SUB_BORROW(r2b, 0, r2b, carry, carry);
-			MP_SUB_BORROW(r3a, 0, r3a, carry, carry);
+			MP_SUB_BORROW(r1b, 0, r1b, carry);
+			MP_SUB_BORROW(r2a, 0, r2a, carry);
+			MP_SUB_BORROW(r2b, 0, r2b, carry);
+			MP_SUB_BORROW(r3a, 0, r3a, carry);
 			r3b -= carry;
 		}
 
 		while (r3b > 0) {
 			int tmp;
-			MP_ADD_CARRY(r1b, r3b, r1b, 0,     carry);
+                        carry = 0;
+			MP_ADD_CARRY(r1b, r3b, r1b, carry);
 			if (carry) {
-				MP_ADD_CARRY(r2a,  0, r2a, carry, carry);
-				MP_ADD_CARRY(r2b,  0, r2b, carry, carry);
-				MP_ADD_CARRY(r3a,  0, r3a, carry, carry);
+				MP_ADD_CARRY(r2a,  0, r2a, carry);
+				MP_ADD_CARRY(r2b,  0, r2b, carry);
+				MP_ADD_CARRY(r3a,  0, r3a, carry);
 			}
-			tmp = carry;
-			MP_SUB_BORROW(r0a, r3b, r0a, 0,     carry);
+			tmp = carry; carry = 0;
+			MP_SUB_BORROW(r0a, r3b, r0a, carry);
 			if (carry) {
-				MP_SUB_BORROW(r0b, 0, r0b, carry, carry);
-				MP_SUB_BORROW(r1a, 0, r1a, carry, carry);
-				MP_SUB_BORROW(r1b, 0, r1b, carry, carry);
-				MP_SUB_BORROW(r2a, 0, r2a, carry, carry);
-				MP_SUB_BORROW(r2b, 0, r2b, carry, carry);
-				MP_SUB_BORROW(r3a, 0, r3a, carry, carry);
+				MP_SUB_BORROW(r0b, 0, r0b, carry);
+				MP_SUB_BORROW(r1a, 0, r1a, carry);
+				MP_SUB_BORROW(r1b, 0, r1b, carry);
+				MP_SUB_BORROW(r2a, 0, r2a, carry);
+				MP_SUB_BORROW(r2b, 0, r2b, carry);
+				MP_SUB_BORROW(r3a, 0, r3a, carry);
 				tmp -= carry;
 			}
 			r3b = tmp;
@@ -160,13 +127,14 @@ ec_GFp_nistp224_mod(const mp_int *a, mp_int *r, const GFMethod *meth)
 
 		while (r3b < 0) {
 			mp_digit maxInt = MP_DIGIT_MAX;
-                	MP_ADD_CARRY (r0a, 1, r0a, 0,     carry);
-                	MP_ADD_CARRY (r0b, 0, r0b, carry, carry);
-                	MP_ADD_CARRY (r1a, 0, r1a, carry, carry);
-                	MP_ADD_CARRY (r1b, maxInt, r1b, carry, carry);
-                	MP_ADD_CARRY (r2a, maxInt, r2a, carry, carry);
-                	MP_ADD_CARRY (r2b, maxInt, r2b, carry, carry);
-                	MP_ADD_CARRY (r3a, maxInt, r3a, carry, carry);
+                        carry = 0;
+                	MP_ADD_CARRY (r0a, 1, r0a, carry);
+                	MP_ADD_CARRY (r0b, 0, r0b, carry);
+                	MP_ADD_CARRY (r1a, 0, r1a, carry);
+                	MP_ADD_CARRY (r1b, maxInt, r1b, carry);
+                	MP_ADD_CARRY (r2a, maxInt, r2a, carry);
+                	MP_ADD_CARRY (r2b, maxInt, r2b, carry);
+                	MP_ADD_CARRY (r3a, maxInt, r3a, carry);
 			r3b += carry;
 		}
 		/* check for final reduction */
@@ -175,9 +143,10 @@ ec_GFp_nistp224_mod(const mp_int *a, mp_int *r, const GFMethod *meth)
 			&& (r2a == MP_DIGIT_MAX) && (r1b == MP_DIGIT_MAX) &&
 			 ((r1a != 0) || (r0b != 0) || (r0a != 0)) ) {
 			/* one last subraction */
-			MP_SUB_BORROW(r0a, 1, r0a, 0,     carry);
-			MP_SUB_BORROW(r0b, 0, r0b, carry, carry);
-			MP_SUB_BORROW(r1a, 0, r1a, carry, carry);
+                        carry = 0;
+			MP_SUB_BORROW(r0a, 1, r0a, carry);
+			MP_SUB_BORROW(r0b, 0, r0b, carry);
+			MP_SUB_BORROW(r1a, 0, r1a, carry);
 			r1b = r2a = r2b = r3a = 0;
 		}
 
@@ -229,22 +198,26 @@ ec_GFp_nistp224_mod(const mp_int *a, mp_int *r, const GFMethod *meth)
 			+(  0, a6,a5b,  0)
 			-(  0	 0,    0|a6b, a6a|a5b )
 			-(  a6b, a6a|a5b, a5a|a4b, a4a|a3b ) */
-		MP_ADD_CARRY (r1, a3b, r1, 0,     carry);
-		MP_ADD_CARRY (r2, a4 , r2, carry, carry);
-		MP_ADD_CARRY (r3, a5a, r3, carry, carry);
-		MP_ADD_CARRY (r1, a5b, r1, 0,     carry);
-		MP_ADD_CARRY (r2, a6 , r2, carry, carry);
-		MP_ADD_CARRY (r3,   0, r3, carry, carry);
+                carry = 0;
+		MP_ADD_CARRY (r1, a3b, r1, carry);
+		MP_ADD_CARRY (r2, a4 , r2, carry);
+		MP_ADD_CARRY (r3, a5a, r3, carry);
+                carry = 0;
+		MP_ADD_CARRY (r1, a5b, r1, carry);
+		MP_ADD_CARRY (r2, a6 , r2, carry);
+		MP_ADD_CARRY (r3,   0, r3, carry);
 
-		MP_SUB_BORROW(r0, a4a_a3b, r0, 0,     carry);
-		MP_SUB_BORROW(r1, a5a_a4b, r1, carry, carry);
-		MP_SUB_BORROW(r2, a6a_a5b, r2, carry, carry);
-		MP_SUB_BORROW(r3, a6b    , r3, carry, carry);
-		MP_SUB_BORROW(r0, a6a_a5b, r0, 0,     carry);
-		MP_SUB_BORROW(r1, a6b    , r1, carry, carry);
+		carry = 0;
+		MP_SUB_BORROW(r0, a4a_a3b, r0, carry);
+		MP_SUB_BORROW(r1, a5a_a4b, r1, carry);
+		MP_SUB_BORROW(r2, a6a_a5b, r2, carry);
+		MP_SUB_BORROW(r3, a6b    , r3, carry);
+		carry = 0;
+		MP_SUB_BORROW(r0, a6a_a5b, r0, carry);
+		MP_SUB_BORROW(r1, a6b    , r1, carry);
 		if (carry) {
-			MP_SUB_BORROW(r2, 0, r2, carry, carry);
-			MP_SUB_BORROW(r3, 0, r3, carry, carry);
+			MP_SUB_BORROW(r2, 0, r2, carry);
+			MP_SUB_BORROW(r3, 0, r3, carry);
 		}
 
 
@@ -253,35 +226,41 @@ ec_GFp_nistp224_mod(const mp_int *a, mp_int *r, const GFMethod *meth)
 		r3b = (int)(r3 >>32);
 		while (r3b > 0) {
 			r3 &= 0xffffffff;
-			MP_ADD_CARRY(r1,((mp_digit)r3b) << 32, r1, 0, carry);
+                        carry = 0;
+			MP_ADD_CARRY(r1,((mp_digit)r3b) << 32, r1, carry);
 			if (carry) {
-				MP_ADD_CARRY(r2,  0, r2, carry, carry);
-				MP_ADD_CARRY(r3,  0, r3, carry, carry);
+				MP_ADD_CARRY(r2,  0, r2, carry);
+				MP_ADD_CARRY(r3,  0, r3, carry);
 			}
-			MP_SUB_BORROW(r0, r3b, r0, 0, carry);
+			carry = 0;
+			MP_SUB_BORROW(r0, r3b, r0, carry);
 			if (carry) {
-				MP_SUB_BORROW(r1, 0, r1, carry, carry);
-				MP_SUB_BORROW(r2, 0, r2, carry, carry);
-				MP_SUB_BORROW(r3, 0, r3, carry, carry);
+				MP_SUB_BORROW(r1, 0, r1, carry);
+				MP_SUB_BORROW(r2, 0, r2, carry);
+				MP_SUB_BORROW(r3, 0, r3, carry);
 			}
 			r3b = (int)(r3 >>32);
 		}
 
 		while (r3b < 0) {
-                	MP_ADD_CARRY (r0, 1, r0, 0,     carry);
-                	MP_ADD_CARRY (r1, MP_DIGIT_MAX <<32, r1, carry, carry);
-                	MP_ADD_CARRY (r2, MP_DIGIT_MAX, r2, carry, carry);
-                	MP_ADD_CARRY (r3, MP_DIGIT_MAX >> 32, r3, carry, carry);
+                        carry = 0;
+                	MP_ADD_CARRY (r0, 1, r0, carry);
+                	MP_ADD_CARRY (r1, MP_DIGIT_MAX <<32, r1, carry);
+                	MP_ADD_CARRY (r2, MP_DIGIT_MAX, r2, carry);
+                	MP_ADD_CARRY (r3, MP_DIGIT_MAX >> 32, r3, carry);
 			r3b = (int)(r3 >>32);
 		}
 		/* check for final reduction */
-		/* now the only way we are over is if the top 4 words are all ones */
+		/* now the only way we are over is if the top 4 words are 
+		 * all ones. Subtract the curve. (curve is 2^224 - 2^96 +1)
+		 */
 		if ((r3 == (MP_DIGIT_MAX >> 32)) && (r2 == MP_DIGIT_MAX)
 			&& ((r1 & MP_DIGIT_MAX << 32)== MP_DIGIT_MAX << 32) &&
 			 ((r1 != MP_DIGIT_MAX << 32 ) || (r0 != 0)) ) {
 			/* one last subraction */
-			MP_SUB_BORROW(r0, 1, r0, 0,     carry);
-			MP_SUB_BORROW(r1, 0, r1, carry, carry);
+			carry = 0;
+			MP_SUB_BORROW(r0, 1, r0, carry);
+			MP_SUB_BORROW(r1, MP_DIGIT_MAX << 32, r1, carry);
 			r2 = r3 = 0;
 		}
 
@@ -298,6 +277,7 @@ ec_GFp_nistp224_mod(const mp_int *a, mp_int *r, const GFMethod *meth)
 		MP_DIGIT(r, 0) = r0;
 #endif
 	}
+	s_mp_clamp(r);
 
   CLEANUP:
 	return res;
@@ -306,7 +286,7 @@ ec_GFp_nistp224_mod(const mp_int *a, mp_int *r, const GFMethod *meth)
 /* Compute the square of polynomial a, reduce modulo p224. Store the
  * result in r.  r could be a.  Uses optimized modular reduction for p224. 
  */
-mp_err
+static mp_err
 ec_GFp_nistp224_sqr(const mp_int *a, mp_int *r, const GFMethod *meth)
 {
 	mp_err res = MP_OKAY;
@@ -320,7 +300,7 @@ ec_GFp_nistp224_sqr(const mp_int *a, mp_int *r, const GFMethod *meth)
 /* Compute the product of two polynomials a and b, reduce modulo p224.
  * Store the result in r.  r could be a or b; a could be b.  Uses
  * optimized modular reduction for p224. */
-mp_err
+static mp_err
 ec_GFp_nistp224_mul(const mp_int *a, const mp_int *b, mp_int *r,
 					const GFMethod *meth)
 {
@@ -334,7 +314,7 @@ ec_GFp_nistp224_mul(const mp_int *a, const mp_int *b, mp_int *r,
 
 /* Divides two field elements. If a is NULL, then returns the inverse of
  * b. */
-mp_err
+static mp_err
 ec_GFp_nistp224_div(const mp_int *a, const mp_int *b, mp_int *r,
 		   const GFMethod *meth)
 {

@@ -1,46 +1,10 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Netscape security libraries.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1994-2000
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
-
-#ifdef DEBUG
-static const char CVS_ID[] = "@(#) $RCSfile: tracker.c,v $ $Revision: 1.7 $ $Date: 2008/02/23 05:29:24 $";
-#endif /* DEBUG */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
  * tracker.c
- * 
+ *
  * This file contains the code used by the pointer-tracking calls used
  * in the debug builds to catch bad pointers.  The entire contents are
  * only available in debug builds (both internal and external builds).
@@ -60,12 +24,9 @@ static const char CVS_ID[] = "@(#) $RCSfile: tracker.c,v $ $Revision: 1.7 $ $Dat
  */
 
 static PLHashNumber PR_CALLBACK
-identity_hash
-(
-  const void *key
-)
+identity_hash(const void *key)
 {
-  return (PLHashNumber)key;
+    return (PLHashNumber)((char *)key - (char *)NULL);
 }
 
 /*
@@ -77,44 +38,38 @@ identity_hash
  */
 
 static PRStatus
-trackerOnceFunc
-(
-  void *arg
-)
+trackerOnceFunc(void *arg)
 {
-  nssPointerTracker *tracker = (nssPointerTracker *)arg;
+    nssPointerTracker *tracker = (nssPointerTracker *)arg;
 
-  tracker->lock = PZ_NewLock(nssILockOther);
-  if( (PZLock *)NULL == tracker->lock ) {
-    return PR_FAILURE;
-  }
+    tracker->lock = PZ_NewLock(nssILockOther);
+    if ((PZLock *)NULL == tracker->lock) {
+        return PR_FAILURE;
+    }
 
-  tracker->table = PL_NewHashTable(0, 
-                                   identity_hash, 
-                                   PL_CompareValues,
-                                   PL_CompareValues,
-                                   (PLHashAllocOps *)NULL, 
-                                   (void *)NULL);
-  if( (PLHashTable *)NULL == tracker->table ) {
-    PZ_DestroyLock(tracker->lock);
-    tracker->lock = (PZLock *)NULL;
-    return PR_FAILURE;
-  }
+    tracker->table =
+        PL_NewHashTable(0, identity_hash, PL_CompareValues, PL_CompareValues,
+                        (PLHashAllocOps *)NULL, (void *)NULL);
+    if ((PLHashTable *)NULL == tracker->table) {
+        PZ_DestroyLock(tracker->lock);
+        tracker->lock = (PZLock *)NULL;
+        return PR_FAILURE;
+    }
 
-  return PR_SUCCESS;
+    return PR_SUCCESS;
 }
 
 /*
  * nssPointerTracker_initialize
  *
  * This method is only present in debug builds.
- * 
+ *
  * This routine initializes an nssPointerTracker object.  Note that
  * the object must have been declared *static* to guarantee that it
  * is in a zeroed state initially.  This routine is idempotent, and
- * may even be safely called by multiple threads simultaneously with 
- * the same argument.  This routine returns a PRStatus value; if 
- * successful, it will return PR_SUCCESS.  On failure it will set an 
+ * may even be safely called by multiple threads simultaneously with
+ * the same argument.  This routine returns a PRStatus value; if
+ * successful, it will return PR_SUCCESS.  On failure it will set an
  * error on the error stack and return PR_FAILURE.
  *
  * The error may be one of the following values:
@@ -126,17 +81,14 @@ trackerOnceFunc
  */
 
 NSS_IMPLEMENT PRStatus
-nssPointerTracker_initialize
-(
-  nssPointerTracker *tracker
-)
+nssPointerTracker_initialize(nssPointerTracker *tracker)
 {
-  PRStatus rv = PR_CallOnceWithArg(&tracker->once, trackerOnceFunc, tracker);
-  if( PR_SUCCESS != rv ) {
-    nss_SetError(NSS_ERROR_NO_MEMORY);
-  }
+    PRStatus rv = PR_CallOnceWithArg(&tracker->once, trackerOnceFunc, tracker);
+    if (PR_SUCCESS != rv) {
+        nss_SetError(NSS_ERROR_NO_MEMORY);
+    }
 
-  return rv;
+    return rv;
 }
 
 #ifdef DONT_DESTROY_EMPTY_TABLES
@@ -150,14 +102,9 @@ nssPointerTracker_initialize
  */
 
 static PRIntn PR_CALLBACK
-count_entries
-(
-  PLHashEntry *he,
-  PRIntn index,
-  void *arg
-)
+count_entries(PLHashEntry *he, PRIntn index, void *arg)
 {
-  return HT_ENUMERATE_NEXT;
+    return HT_ENUMERATE_NEXT;
 }
 #endif /* DONT_DESTROY_EMPTY_TABLES */
 
@@ -174,7 +121,7 @@ static const PRCallOnceType zero_once;
  * nssPointerTracker_finalize
  *
  * This method is only present in debug builds.
- * 
+ *
  * This routine returns the nssPointerTracker object to the pre-
  * initialized state, releasing all resources used by the object.
  * It will *NOT* destroy the objects being tracked by the pointer
@@ -196,58 +143,54 @@ static const PRCallOnceType zero_once;
  */
 
 NSS_IMPLEMENT PRStatus
-nssPointerTracker_finalize
-(
-  nssPointerTracker *tracker
-)
+nssPointerTracker_finalize(nssPointerTracker *tracker)
 {
-  PZLock *lock;
+    PZLock *lock;
 
-  if( (nssPointerTracker *)NULL == tracker ) {
-    nss_SetError(NSS_ERROR_INVALID_POINTER);
-    return PR_FAILURE;
-  }
+    if ((nssPointerTracker *)NULL == tracker) {
+        nss_SetError(NSS_ERROR_INVALID_POINTER);
+        return PR_FAILURE;
+    }
 
-  if( (PZLock *)NULL == tracker->lock ) {
-    nss_SetError(NSS_ERROR_TRACKER_NOT_INITIALIZED);
-    return PR_FAILURE;
-  }
+    if ((PZLock *)NULL == tracker->lock) {
+        nss_SetError(NSS_ERROR_TRACKER_NOT_INITIALIZED);
+        return PR_FAILURE;
+    }
 
-  lock = tracker->lock;
-  PZ_Lock(lock);
+    lock = tracker->lock;
+    PZ_Lock(lock);
 
-  if( (PLHashTable *)NULL == tracker->table ) {
-    PZ_Unlock(lock);
-    nss_SetError(NSS_ERROR_TRACKER_NOT_INITIALIZED);
-    return PR_FAILURE;
-  }
+    if ((PLHashTable *)NULL == tracker->table) {
+        PZ_Unlock(lock);
+        nss_SetError(NSS_ERROR_TRACKER_NOT_INITIALIZED);
+        return PR_FAILURE;
+    }
 
 #ifdef DONT_DESTROY_EMPTY_TABLES
-  /*
-   * I changed my mind; I think we don't want this after all.
-   * Comments?
-   */
-  count = PL_HashTableEnumerateEntries(tracker->table, 
-                                       count_entries,
-                                       (void *)NULL);
+    /*
+     * I changed my mind; I think we don't want this after all.
+     * Comments?
+     */
+    count = PL_HashTableEnumerateEntries(tracker->table, count_entries,
+                                         (void *)NULL);
 
-  if( 0 != count ) {
-    PZ_Unlock(lock);
-    nss_SetError(NSS_ERROR_TRACKER_NOT_EMPTY);
-    return PR_FAILURE;
-  }
+    if (0 != count) {
+        PZ_Unlock(lock);
+        nss_SetError(NSS_ERROR_TRACKER_NOT_EMPTY);
+        return PR_FAILURE;
+    }
 #endif /* DONT_DESTROY_EMPTY_TABLES */
 
-  PL_HashTableDestroy(tracker->table);
-  /* memset(tracker, 0, sizeof(nssPointerTracker)); */
-  tracker->once = zero_once;
-  tracker->lock = (PZLock *)NULL;
-  tracker->table = (PLHashTable *)NULL;
+    PL_HashTableDestroy(tracker->table);
+    /* memset(tracker, 0, sizeof(nssPointerTracker)); */
+    tracker->once = zero_once;
+    tracker->lock = (PZLock *)NULL;
+    tracker->table = (PLHashTable *)NULL;
 
-  PZ_Unlock(lock);
-  PZ_DestroyLock(lock);
+    PZ_Unlock(lock);
+    PZ_DestroyLock(lock);
 
-  return PR_SUCCESS;
+    return PR_SUCCESS;
 }
 
 /*
@@ -274,63 +217,59 @@ nssPointerTracker_finalize
  */
 
 NSS_IMPLEMENT PRStatus
-nssPointerTracker_add
-(
-  nssPointerTracker *tracker,
-  const void *pointer
-)
+nssPointerTracker_add(nssPointerTracker *tracker, const void *pointer)
 {
-  void *check;
-  PLHashEntry *entry;
+    void *check;
+    PLHashEntry *entry;
 
-  if( (nssPointerTracker *)NULL == tracker ) {
-    nss_SetError(NSS_ERROR_INVALID_POINTER);
-    return PR_FAILURE;
-  }
+    if ((nssPointerTracker *)NULL == tracker) {
+        nss_SetError(NSS_ERROR_INVALID_POINTER);
+        return PR_FAILURE;
+    }
 
-  if( (PZLock *)NULL == tracker->lock ) {
-    nss_SetError(NSS_ERROR_TRACKER_NOT_INITIALIZED);
-    return PR_FAILURE;
-  }
+    if ((PZLock *)NULL == tracker->lock) {
+        nss_SetError(NSS_ERROR_TRACKER_NOT_INITIALIZED);
+        return PR_FAILURE;
+    }
 
-  PZ_Lock(tracker->lock);
+    PZ_Lock(tracker->lock);
 
-  if( (PLHashTable *)NULL == tracker->table ) {
+    if ((PLHashTable *)NULL == tracker->table) {
+        PZ_Unlock(tracker->lock);
+        nss_SetError(NSS_ERROR_TRACKER_NOT_INITIALIZED);
+        return PR_FAILURE;
+    }
+
+    check = PL_HashTableLookup(tracker->table, pointer);
+    if ((void *)NULL != check) {
+        PZ_Unlock(tracker->lock);
+        nss_SetError(NSS_ERROR_DUPLICATE_POINTER);
+        return PR_FAILURE;
+    }
+
+    entry = PL_HashTableAdd(tracker->table, pointer, (void *)pointer);
+
     PZ_Unlock(tracker->lock);
-    nss_SetError(NSS_ERROR_TRACKER_NOT_INITIALIZED);
-    return PR_FAILURE;
-  }
 
-  check = PL_HashTableLookup(tracker->table, pointer);
-  if( (void *)NULL != check ) {
-    PZ_Unlock(tracker->lock);
-    nss_SetError(NSS_ERROR_DUPLICATE_POINTER);
-    return PR_FAILURE;
-  }
+    if ((PLHashEntry *)NULL == entry) {
+        nss_SetError(NSS_ERROR_NO_MEMORY);
+        return PR_FAILURE;
+    }
 
-  entry = PL_HashTableAdd(tracker->table, pointer, (void *)pointer);
-
-  PZ_Unlock(tracker->lock);
-
-  if( (PLHashEntry *)NULL == entry ) {
-    nss_SetError(NSS_ERROR_NO_MEMORY);
-    return PR_FAILURE;
-  }
-
-  return PR_SUCCESS;
+    return PR_SUCCESS;
 }
-  
+
 /*
  * nssPointerTracker_remove
  *
  * This method is only present in debug builds.
  *
- * This routine removes the specified pointer from the 
+ * This routine removes the specified pointer from the
  * nssPointerTracker object.  It does not call any destructor for the
  * object; rather, this should be called from the object's destructor.
- * The nssPointerTracker is threadsafe, but this call is not 
- * idempotent.  This routine returns a PRStatus value; if successful 
- * it will return PR_SUCCESS.  On failure it will set an error on the 
+ * The nssPointerTracker is threadsafe, but this call is not
+ * idempotent.  This routine returns a PRStatus value; if successful
+ * it will return PR_SUCCESS.  On failure it will set an error on the
  * error stack and return PR_FAILURE.
  *
  * The error may be one of the following values:
@@ -344,41 +283,37 @@ nssPointerTracker_add
  */
 
 NSS_IMPLEMENT PRStatus
-nssPointerTracker_remove
-(
-  nssPointerTracker *tracker,
-  const void *pointer
-)
+nssPointerTracker_remove(nssPointerTracker *tracker, const void *pointer)
 {
-  PRBool registered;
+    PRBool registered;
 
-  if( (nssPointerTracker *)NULL == tracker ) {
-    nss_SetError(NSS_ERROR_INVALID_POINTER);
-    return PR_FAILURE;
-  }
+    if ((nssPointerTracker *)NULL == tracker) {
+        nss_SetError(NSS_ERROR_INVALID_POINTER);
+        return PR_FAILURE;
+    }
 
-  if( (PZLock *)NULL == tracker->lock ) {
-    nss_SetError(NSS_ERROR_TRACKER_NOT_INITIALIZED);
-    return PR_FAILURE;
-  }
+    if ((PZLock *)NULL == tracker->lock) {
+        nss_SetError(NSS_ERROR_TRACKER_NOT_INITIALIZED);
+        return PR_FAILURE;
+    }
 
-  PZ_Lock(tracker->lock);
+    PZ_Lock(tracker->lock);
 
-  if( (PLHashTable *)NULL == tracker->table ) {
+    if ((PLHashTable *)NULL == tracker->table) {
+        PZ_Unlock(tracker->lock);
+        nss_SetError(NSS_ERROR_TRACKER_NOT_INITIALIZED);
+        return PR_FAILURE;
+    }
+
+    registered = PL_HashTableRemove(tracker->table, pointer);
     PZ_Unlock(tracker->lock);
-    nss_SetError(NSS_ERROR_TRACKER_NOT_INITIALIZED);
-    return PR_FAILURE;
-  }
 
-  registered = PL_HashTableRemove(tracker->table, pointer);
-  PZ_Unlock(tracker->lock);
+    if (!registered) {
+        nss_SetError(NSS_ERROR_POINTER_NOT_REGISTERED);
+        return PR_FAILURE;
+    }
 
-  if( !registered ) {
-    nss_SetError(NSS_ERROR_POINTER_NOT_REGISTERED);
-    return PR_FAILURE;
-  }
-
-  return PR_SUCCESS;
+    return PR_SUCCESS;
 }
 
 /*
@@ -390,10 +325,10 @@ nssPointerTracker_remove
  * with the nssPointerTracker object.  The nssPointerTracker object is
  * threadsafe, and this call may be safely called from multiple threads
  * simultaneously with the same arguments.  This routine returns a
- * PRStatus value; if the pointer is registered this will return 
- * PR_SUCCESS.  Otherwise it will set an error on the error stack and 
- * return PR_FAILURE.  Although the error is suitable for leaving on 
- * the stack, callers may wish to augment the information available by 
+ * PRStatus value; if the pointer is registered this will return
+ * PR_SUCCESS.  Otherwise it will set an error on the error stack and
+ * return PR_FAILURE.  Although the error is suitable for leaving on
+ * the stack, callers may wish to augment the information available by
  * placing a more type-specific error on the stack.
  *
  * The error may be one of the following values:
@@ -407,41 +342,37 @@ nssPointerTracker_remove
  */
 
 NSS_IMPLEMENT PRStatus
-nssPointerTracker_verify
-(
-  nssPointerTracker *tracker,
-  const void *pointer
-)
+nssPointerTracker_verify(nssPointerTracker *tracker, const void *pointer)
 {
-  void *check;
+    void *check;
 
-  if( (nssPointerTracker *)NULL == tracker ) {
-    nss_SetError(NSS_ERROR_INVALID_POINTER);
-    return PR_FAILURE;
-  }
+    if ((nssPointerTracker *)NULL == tracker) {
+        nss_SetError(NSS_ERROR_INVALID_POINTER);
+        return PR_FAILURE;
+    }
 
-  if( (PZLock *)NULL == tracker->lock ) {
-    nss_SetError(NSS_ERROR_TRACKER_NOT_INITIALIZED);
-    return PR_FAILURE;
-  }
+    if ((PZLock *)NULL == tracker->lock) {
+        nss_SetError(NSS_ERROR_TRACKER_NOT_INITIALIZED);
+        return PR_FAILURE;
+    }
 
-  PZ_Lock(tracker->lock);
+    PZ_Lock(tracker->lock);
 
-  if( (PLHashTable *)NULL == tracker->table ) {
+    if ((PLHashTable *)NULL == tracker->table) {
+        PZ_Unlock(tracker->lock);
+        nss_SetError(NSS_ERROR_TRACKER_NOT_INITIALIZED);
+        return PR_FAILURE;
+    }
+
+    check = PL_HashTableLookup(tracker->table, pointer);
     PZ_Unlock(tracker->lock);
-    nss_SetError(NSS_ERROR_TRACKER_NOT_INITIALIZED);
-    return PR_FAILURE;
-  }
 
-  check = PL_HashTableLookup(tracker->table, pointer);
-  PZ_Unlock(tracker->lock);
+    if ((void *)NULL == check) {
+        nss_SetError(NSS_ERROR_POINTER_NOT_REGISTERED);
+        return PR_FAILURE;
+    }
 
-  if( (void *)NULL == check ) {
-    nss_SetError(NSS_ERROR_POINTER_NOT_REGISTERED);
-    return PR_FAILURE;
-  }
-
-  return PR_SUCCESS;
+    return PR_SUCCESS;
 }
 
 #endif /* DEBUG */

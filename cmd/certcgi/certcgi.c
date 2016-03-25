@@ -1,38 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Netscape security libraries.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1994-2000
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /* Cert-O-Matic CGI */
 
@@ -97,7 +65,7 @@ static void
 error_out(char  *error_string)
 {
     printf("Content-type: text/plain\n\n");
-    printf(error_string);
+    printf("%s", error_string);
     fflush(stderr);
     fflush(stdout);
     exit(1);
@@ -388,81 +356,6 @@ find_field_bool(Pair    *data,
     }
 }
 
-static char *
-update_data_by_name(Pair  *data, 
-		    char  *field_name,
-                    char  *new_data)
-    /* replaces the data in the data structure associated with 
-       a name with new data, returns null if not found */
-{
-    int                   i = 0;
-    int                   found = 0;
-    int                   length = 100;
-    char                  *new;
-
-    while (return_name(data, i) != NULL) {
-	if (PORT_Strcmp(return_name(data, i), field_name) == 0) {
-	    new = make_copy_string( new_data, length, '\0');
-	    PORT_Free(return_data(data, i));
-	    found = 1;
-	    (*(data + i)).data = new;
-	    break;
-	}
-	i++;
-    }
-    if (!found) {
-	new = NULL;
-    }
-    return new;
-}
-
-static char *
-update_data_by_index(Pair  *data, 
-		     int   n, 
-		     char  *new_data)
-    /* replaces the data of a particular index in the data structure */
-{
-    int                    length = 100;
-    char                   *new;
-
-    new = make_copy_string(new_data, length, '\0');
-    PORT_Free(return_data(data, n));
-    (*(data + n)).data = new;
-    return new;
-}
-
-
-static Pair *
-add_field(Pair   *data, 
-	  char*  field_name, 
-	  char*  field_data)
-    /* adds a new name/data pair to the data structure */
-{
-    int          i = 0;
-    int          j;
-    int          name_length = 100;
-    int          data_length = 100;
-
-    while(return_name(data, i) != NULL) {
-	i++;
-    }
-    j = START_FIELDS;
-    while ( j < (i + 1) ) {
-	j = j * 2;
-    }
-    if (j == (i + 1)) {
-	data = (Pair *) PORT_Realloc(data, (j * 2) * sizeof(Pair));
-	if (data == NULL) {
-	    error_allocate();
-	}
-    }
-    (*(data + i)).name = make_copy_string(field_name, name_length, '\0');
-    (*(data + i)).data = make_copy_string(field_data, data_length, '\0');
-    (data + i + 1)->name = NULL;
-    return data;
-}
-
-
 static CERTCertificateRequest *
 makeCertReq(Pair             *form_data,
 	    int              which_priv_key)
@@ -559,10 +452,6 @@ MakeV1Cert(CERTCertDBHandle        *handle,
     PRExplodedTime                  printableTime;
     PRTime                          now, 
 	                            after;
-    SECStatus rv;
-   
-    
-
     if ( !selfsign ) {
 	issuerCert = CERT_FindCertByNameString(handle, issuerNameStr);
 	if (!issuerCert) {
@@ -571,7 +460,7 @@ MakeV1Cert(CERTCertDBHandle        *handle,
 	}
     }
     if (find_field_bool(data, "manValidity", PR_TRUE)) {
-	rv = DER_AsciiToTime(&now, find_field(data, "notBefore", PR_TRUE));
+	(void)DER_AsciiToTime(&now, find_field(data, "notBefore", PR_TRUE));
     } else {
 	now = PR_Now();
     }
@@ -582,7 +471,7 @@ MakeV1Cert(CERTCertDBHandle        *handle,
 	PR_ExplodeTime (now, PR_GMTParameters, &printableTime);
     }
     if (find_field_bool(data, "manValidity", PR_TRUE)) {
-	rv = DER_AsciiToTime(&after, find_field(data, "notAfter", PR_TRUE));
+	(void)DER_AsciiToTime(&after, find_field(data, "notAfter", PR_TRUE));
 	PR_ExplodeTime (after, PR_GMTParameters, &printableTime);
     } else {
 	printableTime.tm_month += 3;
@@ -619,11 +508,11 @@ get_serial_number(Pair  *data)
     if (find_field_bool(data, "serial-auto", PR_TRUE)) {
 	serialFile = fopen(filename, "r");
 	if (serialFile != NULL) {
-	    fread(&serial, sizeof(int), 1, serialFile);
-	    if (ferror(serialFile) != 0) {
+	    size_t nread = fread(&serial, sizeof(int), 1, serialFile);
+	    if (ferror(serialFile) != 0 || nread != 1) {
 		error_out("Error: Unable to read serial number file");
 	    }
-	    if (serial == 4294967295) {
+	    if (serial == -1) {
 		serial = 21;
 	    }
 	    fclose(serialFile);
@@ -675,11 +564,11 @@ get_serial_number(Pair  *data)
 
 
 typedef SECStatus (* EXTEN_VALUE_ENCODER)
-		(PRArenaPool *extHandle, void *value, SECItem *encodedValue);
+		(PLArenaPool *extHandle, void *value, SECItem *encodedValue);
 
 static SECStatus 
 EncodeAndAddExtensionValue(
-	PRArenaPool          *arena, 
+	PLArenaPool          *arena,
 	void                 *extHandle, 
 	void                 *value, 
 	PRBool 		     criticality,
@@ -745,10 +634,10 @@ static CERTOidSequence *
 CreateOidSequence(void)
 {
   CERTOidSequence *rv = (CERTOidSequence *)NULL;
-  PRArenaPool *arena = (PRArenaPool *)NULL;
+  PLArenaPool *arena = (PLArenaPool *)NULL;
 
   arena = PORT_NewArena(DER_DEFAULT_CHUNKSIZE);
-  if( (PRArenaPool *)NULL == arena ) {
+  if( (PLArenaPool *)NULL == arena ) {
     goto loser;
   }
 
@@ -766,7 +655,7 @@ CreateOidSequence(void)
   return rv;
 
  loser:
-  if( (PRArenaPool *)NULL != arena ) {
+  if( (PLArenaPool *)NULL != arena ) {
     PORT_FreeArena(arena, PR_FALSE);
   }
 
@@ -848,6 +737,11 @@ AddExtKeyUsage(void *extHandle, Pair *data)
 
   if( find_field_bool(data, "extKeyUsage-serverAuth", PR_TRUE) ) {
     rv = AddOidToSequence(os, SEC_OID_EXT_KEY_USAGE_SERVER_AUTH);
+    if( SECSuccess != rv ) goto loser;
+  }
+
+  if( find_field_bool(data, "extKeyUsage-msTrustListSign", PR_TRUE) ) {
+    rv = AddOidToSequence(os, SEC_OID_MS_EXT_KEY_USAGE_CTL_SIGNING);
     if( SECSuccess != rv ) goto loser;
   }
 
@@ -968,7 +862,7 @@ AddAuthKeyID (void              *extHandle,
 	      CERTCertDBHandle  *handle)
 {
     CERTAuthKeyID               *authKeyID = NULL;    
-    PRArenaPool                 *arena = NULL;
+    PLArenaPool                 *arena = NULL;
     SECStatus                   rv = SECSuccess;
     CERTCertificate             *issuerCert = NULL;
     CERTGeneralName             *genNames;
@@ -1040,7 +934,7 @@ AddPrivKeyUsagePeriod(void             *extHandle,
 {
     char *notBeforeStr;
     char *notAfterStr;
-    PRArenaPool *arena = NULL;
+    PLArenaPool *arena = NULL;
     SECStatus rv = SECSuccess;
     CERTPrivKeyUsagePeriod *pkup;
 
@@ -1429,7 +1323,7 @@ string_to_ipaddress(char *string)
 		}
 	    }
 	}
-	if (value >= 0 || value < 256) {
+	if (value >= 0 && value < 256) {
 	    *(ipaddress->data + j) = value;
 	} else {
 	    error_out("ERROR: Improperly formated IP Address");
@@ -1444,52 +1338,49 @@ string_to_ipaddress(char *string)
     return ipaddress;
 }
 
+static int
+chr_to_hex(char c) {
+    if (isdigit(c)) {
+        return c - '0';
+    }
+    if (isxdigit(c)) {
+        return toupper(c) - 'A' + 10;
+    }
+    return -1;
+}
+
 static SECItem *
-string_to_binary(char  *string)
+string_to_binary(char *string)
 {
     SECItem            *rv;
-    int                high_digit;
-    int                low_digit;
 
     rv = (SECItem *) PORT_ZAlloc(sizeof(SECItem));
     if (rv == NULL) {
 	error_allocate();
     }
     rv->data = (unsigned char *) PORT_ZAlloc((PORT_Strlen(string))/3 + 2);
-    while (!isxdigit(*string)) {
+    rv->len = 0;
+    while (*string && !isxdigit(*string)) {
 	string++;
     }
-    rv->len = 0;
-    while (*string != '\0') {
-	if (isxdigit(*string)) {
-	    if (*string >= '0' && *string <= '9') {
-		high_digit = *string - '0';
-	    } else {
-		*string = toupper(*string);
-		high_digit = *string - 'A';
-	    }
-	    string++;
-	    if (*string >= '0' && *string <= '9') {
-		low_digit = *string - '0';
-	    } else {
-		*string = toupper(*string);
-		low_digit = *string = 'A';
-	    }
-	    (rv->len)++;
-	} else {
-	    if (*string == ':') {
-		string++;
-	    } else {
-		if (*string == ' ') {
-		    while (*string == ' ') {
-			string++;
-		    }
-		}
-		if (*string != '\0') {
-		    error_out("ERROR: Improperly formated binary encoding");
-		}
-	    }
-	} 
+    while (*string) {
+        int high, low;
+        high = chr_to_hex(*string++);
+        low = chr_to_hex(*string++);
+        if (high < 0 || low < 0) {
+            error_out("ERROR: Improperly formated binary encoding");
+        }
+	rv->data[(rv->len)++] = high << 4 | low;
+        if (*string != ':') {
+            break;
+        }
+        ++string;
+    }
+    while (*string == ' ') {
+       ++string;
+    }
+    if (*string) {
+        error_out("ERROR: Junk after binary encoding");
     }
 
     return rv;
@@ -1498,7 +1389,7 @@ string_to_binary(char  *string)
 static SECStatus
 MakeGeneralName(char             *name, 
 		CERTGeneralName  *genName,
-		PRArenaPool      *arena)
+		PLArenaPool      *arena)
 {
     SECItem                      *oid;
     SECOidData                   *oidData;
@@ -1638,7 +1529,7 @@ MakeGeneralName(char             *name,
 static CERTGeneralName *
 MakeAltName(Pair             *data, 
 	    char             *which, 
-	    PRArenaPool      *arena)
+	    PLArenaPool      *arena)
 {
     CERTGeneralName          *SubAltName;
     CERTGeneralName          *current;
@@ -1699,7 +1590,7 @@ MakeAltName(Pair             *data,
 
 static CERTNameConstraints *
 MakeNameConstraints(Pair             *data, 
-		    PRArenaPool      *arena)
+		    PLArenaPool      *arena)
 {
     CERTNameConstraints      *NameConstraints;
     CERTNameConstraint       *current = NULL;
@@ -1821,7 +1712,7 @@ AddAltName(void              *extHandle,
 	   int               type)
 {
     PRBool             autoIssuer = PR_FALSE;
-    PRArenaPool        *arena = NULL;
+    PLArenaPool        *arena = NULL;
     CERTGeneralName    *genName = NULL;
     char               *which = NULL;
     char               *name = NULL;
@@ -1891,7 +1782,7 @@ static SECStatus
 AddNameConstraints(void  *extHandle,
 		   Pair  *data)
 {
-    PRArenaPool         *arena = NULL;
+    PLArenaPool         *arena = NULL;
     CERTNameConstraints *constraints = NULL;
     SECStatus           rv = SECSuccess;
 
@@ -2138,7 +2029,7 @@ SignCert(CERTCertificate   *cert,
     SECItem                der;
     SECKEYPrivateKey       *caPrivateKey = NULL;
     SECStatus              rv;
-    PRArenaPool            *arena;
+    PLArenaPool            *arena;
     SECOidTag              algID;
 
     if (which_key == 0) {

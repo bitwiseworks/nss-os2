@@ -1,39 +1,7 @@
 #
-# ***** BEGIN LICENSE BLOCK *****
-# Version: MPL 1.1/GPL 2.0/LGPL 2.1
-#
-# The contents of this file are subject to the Mozilla Public License Version
-# 1.1 (the "License"); you may not use this file except in compliance with
-# the License. You may obtain a copy of the License at
-# http://www.mozilla.org/MPL/
-#
-# Software distributed under the License is distributed on an "AS IS" basis,
-# WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
-# for the specific language governing rights and limitations under the
-# License.
-#
-# The Original Code is the Netscape security libraries.
-#
-# The Initial Developer of the Original Code is
-# Netscape Communications Corporation.
-# Portions created by the Initial Developer are Copyright (C) 1994-2000
-# the Initial Developer. All Rights Reserved.
-#
-# Contributor(s):
-#
-# Alternatively, the contents of this file may be used under the terms of
-# either the GNU General Public License Version 2 or later (the "GPL"), or
-# the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
-# in which case the provisions of the GPL or the LGPL are applicable instead
-# of those above. If you wish to allow use of your version of this file only
-# under the terms of either the GPL or the LGPL, and not to allow others to
-# use your version of this file under the terms of the MPL, indicate your
-# decision by deleting the provisions above and replace them with the notice
-# and other provisions required by the GPL or the LGPL. If you do not delete
-# the provisions above, a recipient may use your version of this file under
-# the terms of any one of the MPL, the GPL or the LGPL.
-#
-# ***** END LICENSE BLOCK *****
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 # Configuration information for building in the "Core Components" source module
 
@@ -63,12 +31,16 @@ endif
 #######################################################################
 
 TARGET_OSES = FreeBSD BSD_OS NetBSD OpenUNIX OS2 QNX Darwin BeOS OpenBSD \
-              AIX RISCOS WINNT WIN95 WINCE
+              AIX RISCOS WINNT WIN95 Linux Android
 
 ifeq (,$(filter-out $(TARGET_OSES),$(OS_TARGET)))
 include $(CORE_DEPTH)/coreconf/$(OS_TARGET).mk
 else
+ifeq ($(OS_TARGET),SunOS)
+include $(CORE_DEPTH)/coreconf/SunOS5.mk
+else
 include $(CORE_DEPTH)/coreconf/$(OS_TARGET)$(OS_RELEASE).mk
+endif
 endif
 
 #######################################################################
@@ -174,8 +146,8 @@ endif
 # [16.0] Global environ ment defines
 #######################################################################
 
-ifdef NSS_ENABLE_ECC
-DEFINES += -DNSS_ENABLE_ECC
+ifdef NSS_DISABLE_ECC
+DEFINES += -DNSS_DISABLE_ECC
 endif
 
 ifdef NSS_ECC_MORE_THAN_SUITE_B
@@ -194,6 +166,14 @@ ifdef NSS_DISABLE_DBM
 DEFINES += -DNSS_DISABLE_DBM
 endif
 
+ifdef NSS_DISABLE_CHACHAPOLY
+DEFINES += -DNSS_DISABLE_CHACHAPOLY
+endif
+
+ifdef NSS_PKIX_NO_LDAP
+DEFINES += -DNSS_PKIX_NO_LDAP
+endif
+
 # Avoid building object leak test code for optimized library
 ifndef BUILD_OPT
 ifdef PKIX_OBJECT_LEAK_TEST
@@ -207,3 +187,21 @@ endif
 DEFINES += -DUSE_UTIL_DIRECTLY
 USE_UTIL_DIRECTLY = 1
 
+# Build with NO_NSPR_10_SUPPORT to avoid using obsolete NSPR features
+DEFINES += -DNO_NSPR_10_SUPPORT
+
+# Hide old, deprecated, TLS cipher suite names when building NSS
+DEFINES += -DSSL_DISABLE_DEPRECATED_CIPHER_SUITE_NAMES
+
+# Mozilla's mozilla/modules/zlib/src/zconf.h adds the MOZ_Z_ prefix to zlib
+# exported symbols, which causes problem when NSS is built as part of Mozilla.
+# So we add a NSS_SSL_ENABLE_ZLIB variable to allow Mozilla to turn this off.
+NSS_SSL_ENABLE_ZLIB = 1
+
+# Allow build-time configuration of TLS 1.3 (Experimental)
+ifdef NSS_ENABLE_TLS_1_3
+ifdef NSS_DISABLE_ECC
+$(error Setting NSS_ENABLE_TLS_1_3 and NSS_DISABLE_ECC isn't a good idea.)
+endif
+DEFINES += -DNSS_ENABLE_TLS_1_3
+endif

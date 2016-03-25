@@ -1,41 +1,6 @@
-/* 
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the elliptic curve math library.
- *
- * The Initial Developer of the Original Code is
- * Sun Microsystems, Inc.
- * Portions created by the Initial Developer are Copyright (C) 2003
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Stephen Fung <fungstep@hotmail.com> and
- *   Douglas Stebila <douglas@stebila.ca>, Sun Microsystems Laboratories
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef __ecl_priv_h_
 #define __ecl_priv_h_
@@ -64,40 +29,39 @@
 	((i) >= mpl_significant_bits((a))) ? 0 : mpl_get_bit((a), (i))
 
 #if !defined(MP_NO_MP_WORD) && !defined(MP_NO_ADD_WORD)
-#define MP_ADD_CARRY(a1, a2, s, cin, cout)   \
+#define MP_ADD_CARRY(a1, a2, s, carry)   \
     { mp_word w; \
-    w = ((mp_word)(cin)) + (a1) + (a2); \
+    w = ((mp_word)carry) + (a1) + (a2); \
     s = ACCUM(w); \
-    cout = CARRYOUT(w); }
+    carry = CARRYOUT(w); }
 
-#define MP_SUB_BORROW(a1, a2, s, bin, bout)   \
+#define MP_SUB_BORROW(a1, a2, s, borrow)   \
     { mp_word w; \
-    w = ((mp_word)(a1)) - (a2) - (bin); \
+    w = ((mp_word)(a1)) - (a2) - borrow; \
     s = ACCUM(w); \
-    bout = (w >> MP_DIGIT_BIT) & 1; }
+    borrow = (w >> MP_DIGIT_BIT) & 1; }
 
 #else
 /* NOTE, 
- * cin and cout could be the same variable.
- * bin and bout could be the same variable.
+ * carry and borrow are both read and written.
  * a1 or a2 and s could be the same variable.
  * don't trash those outputs until their respective inputs have
  * been read. */
-#define MP_ADD_CARRY(a1, a2, s, cin, cout)   \
+#define MP_ADD_CARRY(a1, a2, s, carry)   \
     { mp_digit tmp,sum; \
     tmp = (a1); \
     sum = tmp + (a2); \
     tmp = (sum < tmp);                     /* detect overflow */ \
-    s = sum += (cin); \
-    cout = tmp + (sum < (cin)); }
+    s = sum += carry; \
+    carry = tmp + (sum < carry); }
 
-#define MP_SUB_BORROW(a1, a2, s, bin, bout)   \
+#define MP_SUB_BORROW(a1, a2, s, borrow)   \
     { mp_digit tmp; \
     tmp = (a1); \
     s = tmp - (a2); \
     tmp = (s > tmp);                    /* detect borrow */ \
-    if ((bin) && !s--) tmp++;	\
-    bout = tmp; }
+    if (borrow && !s--) tmp++;	\
+    borrow = tmp; }
 #endif
 
 
@@ -270,6 +234,9 @@ mp_err ec_group_set_gfp521(ECGroup *group, ECCurveName);
 mp_err ec_group_set_gf2m163(ECGroup *group, ECCurveName name);
 mp_err ec_group_set_gf2m193(ECGroup *group, ECCurveName name);
 mp_err ec_group_set_gf2m233(ECGroup *group, ECCurveName name);
+
+/* Optimized point multiplication */
+mp_err ec_group_set_gfp256_32(ECGroup *group, ECCurveName name);
 
 /* Optimized floating-point arithmetic */
 #ifdef ECL_USE_FP

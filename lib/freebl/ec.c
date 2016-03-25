@@ -1,41 +1,6 @@
-/*
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Elliptic Curve Cryptography library.
- *
- * The Initial Developer of the Original Code is
- * Sun Microsystems, Inc.
- * Portions created by the Initial Developer are Copyright (C) 2003
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Dr Vipul Gupta <vipul.gupta@sun.com> and
- *   Douglas Stebila <douglas@stebila.ca>, Sun Microsystems Laboratories
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifdef FREEBL_NO_DEPEND
 #include "stubs.h"
@@ -51,7 +16,7 @@
 #include "ec.h"
 #include "ecl.h"
 
-#ifdef NSS_ENABLE_ECC
+#ifndef NSS_DISABLE_ECC
 
 /* 
  * Returns true if pointP is the point at infinity, false otherwise
@@ -227,7 +192,7 @@ cleanup:
 
     return rv;
 }
-#endif /* NSS_ENABLE_ECC */
+#endif /* NSS_DISABLE_ECC */
 
 /* Generates a new EC key pair. The private key is a supplied
  * value and the public key is the result of performing a scalar 
@@ -238,8 +203,8 @@ ec_NewKey(ECParams *ecParams, ECPrivateKey **privKey,
     const unsigned char *privKeyBytes, int privKeyLen)
 {
     SECStatus rv = SECFailure;
-#ifdef NSS_ENABLE_ECC
-    PRArenaPool *arena;
+#ifndef NSS_DISABLE_ECC
+    PLArenaPool *arena;
     ECPrivateKey *key;
     mp_int k;
     mp_err err = MP_OKAY;
@@ -248,6 +213,7 @@ ec_NewKey(ECParams *ecParams, ECPrivateKey **privKey,
 #if EC_DEBUG
     printf("ec_NewKey called\n");
 #endif
+    MP_DIGITS(&k) = 0;
 
     if (!ecParams || !privKey || !privKeyBytes || (privKeyLen < 0)) {
 	PORT_SetError(SEC_ERROR_INVALID_ARGS);
@@ -316,7 +282,6 @@ ec_NewKey(ECParams *ecParams, ECPrivateKey **privKey,
     }
 
     /* Compute corresponding public key */
-    MP_DIGITS(&k) = 0;
     CHECK_MPI_OK( mp_init(&k) );
     CHECK_MPI_OK( mp_read_unsigned_octets(&k, key->privateValue.data, 
 	(mp_size) len) );
@@ -336,7 +301,7 @@ cleanup:
 #endif
 #else
     PORT_SetError(SEC_ERROR_UNSUPPORTED_KEYALG);
-#endif /* NSS_ENABLE_ECC */
+#endif /* NSS_DISABLE_ECC */
 
     return rv;
 
@@ -352,15 +317,15 @@ EC_NewKeyFromSeed(ECParams *ecParams, ECPrivateKey **privKey,
     const unsigned char *seed, int seedlen)
 {
     SECStatus rv = SECFailure;
-#ifdef NSS_ENABLE_ECC
+#ifndef NSS_DISABLE_ECC
     rv = ec_NewKey(ecParams, privKey, seed, seedlen);
 #else
     PORT_SetError(SEC_ERROR_UNSUPPORTED_KEYALG);
-#endif /* NSS_ENABLE_ECC */
+#endif /* NSS_DISABLE_ECC */
     return rv;
 }
 
-#ifdef NSS_ENABLE_ECC
+#ifndef NSS_DISABLE_ECC
 /* Generate a random private key using the algorithm A.4.1 of ANSI X9.62,
  * modified a la FIPS 186-2 Change Notice 1 to eliminate the bias in the
  * random number generator.
@@ -416,7 +381,7 @@ cleanup:
     }
     return privKeyBytes;
 }
-#endif /* NSS_ENABLE_ECC */
+#endif /* NSS_DISABLE_ECC */
 
 /* Generates a new EC key pair. The private key is a random value and
  * the public key is the result of performing a scalar point multiplication
@@ -426,7 +391,7 @@ SECStatus
 EC_NewKey(ECParams *ecParams, ECPrivateKey **privKey)
 {
     SECStatus rv = SECFailure;
-#ifdef NSS_ENABLE_ECC
+#ifndef NSS_DISABLE_ECC
     int len;
     unsigned char *privKeyBytes = NULL;
 
@@ -451,7 +416,7 @@ cleanup:
 #endif
 #else
     PORT_SetError(SEC_ERROR_UNSUPPORTED_KEYALG);
-#endif /* NSS_ENABLE_ECC */
+#endif /* NSS_DISABLE_ECC */
     
     return rv;
 }
@@ -465,7 +430,7 @@ cleanup:
 SECStatus 
 EC_ValidatePublicKey(ECParams *ecParams, SECItem *publicValue)
 {
-#ifdef NSS_ENABLE_ECC
+#ifndef NSS_DISABLE_ECC
     mp_int Px, Py;
     ECGroup *group = NULL;
     SECStatus rv = SECFailure;
@@ -541,7 +506,7 @@ cleanup:
 #else
     PORT_SetError(SEC_ERROR_UNSUPPORTED_KEYALG);
     return SECFailure;
-#endif /* NSS_ENABLE_ECC */
+#endif /* NSS_DISABLE_ECC */
 }
 
 /* 
@@ -562,7 +527,7 @@ ECDH_Derive(SECItem  *publicValue,
             SECItem  *derivedSecret)
 {
     SECStatus rv = SECFailure;
-#ifdef NSS_ENABLE_ECC
+#ifndef NSS_DISABLE_ECC
     unsigned int len = 0;
     SECItem pointQ = {siBuffer, NULL, 0};
     mp_int k; /* to hold the private value */
@@ -578,12 +543,21 @@ ECDH_Derive(SECItem  *publicValue,
 	return SECFailure;
     }
 
+    /*
+     * We fail if the public value is the point at infinity, since
+     * this produces predictable results.
+     */
+    if (ec_point_at_infinity(publicValue)) {
+	PORT_SetError(SEC_ERROR_BAD_KEY);
+	return SECFailure;
+    }
+
+    MP_DIGITS(&k) = 0;
     memset(derivedSecret, 0, sizeof *derivedSecret);
     len = (ecParams->fieldID.size + 7) >> 3;  
     pointQ.len = 2*len + 1;
     if ((pointQ.data = PORT_Alloc(2*len + 1)) == NULL) goto cleanup;
 
-    MP_DIGITS(&k) = 0;
     CHECK_MPI_OK( mp_init(&k) );
     CHECK_MPI_OK( mp_read_unsigned_octets(&k, privateValue->data, 
 	                                  (mp_size) privateValue->len) );
@@ -631,7 +605,7 @@ cleanup:
     }
 #else
     PORT_SetError(SEC_ERROR_UNSUPPORTED_KEYALG);
-#endif /* NSS_ENABLE_ECC */
+#endif /* NSS_DISABLE_ECC */
 
     return rv;
 }
@@ -645,7 +619,7 @@ ECDSA_SignDigestWithSeed(ECPrivateKey *key, SECItem *signature,
     const SECItem *digest, const unsigned char *kb, const int kblen)
 {
     SECStatus rv = SECFailure;
-#ifdef NSS_ENABLE_ECC
+#ifndef NSS_DISABLE_ECC
     mp_int x1;
     mp_int d, k;     /* private key, random integer */
     mp_int r, s;     /* tuple (r, s) is the signature */
@@ -655,6 +629,7 @@ ECDSA_SignDigestWithSeed(ECPrivateKey *key, SECItem *signature,
     SECItem kGpoint = { siBuffer, NULL, 0};
     int flen = 0;    /* length in bytes of the field size */
     unsigned olen;   /* length in bytes of the base point order */
+    unsigned obits;  /* length in bits  of the base point order */
 
 #if EC_DEBUG
     char mpstr[256];
@@ -697,6 +672,7 @@ ECDSA_SignDigestWithSeed(ECPrivateKey *key, SECItem *signature,
 
     SECITEM_TO_MPINT( ecParams->order, &n );
     SECITEM_TO_MPINT( key->privateValue, &d );
+
     CHECK_MPI_OK( mp_read_unsigned_octets(&k, kb, kblen) );
     /* Make sure k is in the interval [1, n-1] */
     if ((mp_cmp_z(&k) <= 0) || (mp_cmp(&k, &n) >= 0)) {
@@ -709,6 +685,27 @@ ECDSA_SignDigestWithSeed(ECPrivateKey *key, SECItem *signature,
 #endif
 	PORT_SetError(SEC_ERROR_NEED_RANDOM);
 	goto cleanup;
+    }
+
+    /*
+    ** We do not want timing information to leak the length of k,
+    ** so we compute k*G using an equivalent scalar of fixed
+    ** bit-length.
+    ** Fix based on patch for ECDSA timing attack in the paper
+    ** by Billy Bob Brumley and Nicola Tuveri at
+    **   http://eprint.iacr.org/2011/232
+    **
+    ** How do we convert k to a value of a fixed bit-length?
+    ** k starts off as an integer satisfying 0 <= k < n.  Hence,
+    ** n <= k+n < 2n, which means k+n has either the same number
+    ** of bits as n or one more bit than n.  If k+n has the same
+    ** number of bits as n, the second addition ensures that the
+    ** final value has exactly one more bit than n.  Thus, we
+    ** always end up with a value that exactly one more bit than n.
+    */
+    CHECK_MPI_OK( mp_add(&k, &n, &k) );
+    if (mpl_significant_bits(&k) <= mpl_significant_bits(&n)) {
+	CHECK_MPI_OK( mp_add(&k, &n, &k) );
     }
 
     /* 
@@ -758,8 +755,9 @@ ECDSA_SignDigestWithSeed(ECPrivateKey *key, SECItem *signature,
     /* In the definition of EC signing, digests are truncated
      * to the length of n in bits. 
      * (see SEC 1 "Elliptic Curve Digit Signature Algorithm" section 4.1.*/
-    if (digest->len*8 > ecParams->fieldID.size) {
-	mpl_rsh(&s,&s,digest->len*8 - ecParams->fieldID.size);
+    CHECK_MPI_OK( (obits = mpl_significant_bits(&n)) );
+    if (digest->len*8 > obits) {
+	mpl_rsh(&s,&s,digest->len*8 - obits);
     }
 
 #if EC_DEBUG
@@ -833,7 +831,7 @@ cleanup:
 #endif
 #else
     PORT_SetError(SEC_ERROR_UNSUPPORTED_KEYALG);
-#endif /* NSS_ENABLE_ECC */
+#endif /* NSS_DISABLE_ECC */
 
    return rv;
 }
@@ -846,7 +844,7 @@ SECStatus
 ECDSA_SignDigest(ECPrivateKey *key, SECItem *signature, const SECItem *digest)
 {
     SECStatus rv = SECFailure;
-#ifdef NSS_ENABLE_ECC
+#ifndef NSS_DISABLE_ECC
     int len;
     unsigned char *kBytes= NULL;
 
@@ -874,20 +872,25 @@ cleanup:
 #endif
 #else
     PORT_SetError(SEC_ERROR_UNSUPPORTED_KEYALG);
-#endif /* NSS_ENABLE_ECC */
+#endif /* NSS_DISABLE_ECC */
 
     return rv;
 }
 
 /*
 ** Checks the signature on the given digest using the key provided.
+**
+** The key argument must represent a valid EC public key (a point on
+** the relevant curve).  If it is not a valid point, then the behavior
+** of this function is undefined.  In cases where a public key might
+** not be valid, use EC_ValidatePublicKey to check.
 */
 SECStatus 
 ECDSA_VerifyDigest(ECPublicKey *key, const SECItem *signature, 
                  const SECItem *digest)
 {
     SECStatus rv = SECFailure;
-#ifdef NSS_ENABLE_ECC
+#ifndef NSS_DISABLE_ECC
     mp_int r_, s_;           /* tuple (r', s') is received signature) */
     mp_int c, u1, u2, v;     /* intermediate values used in verification */
     mp_int x1;
@@ -898,6 +901,7 @@ ECDSA_VerifyDigest(ECPublicKey *key, const SECItem *signature,
     int slen;       /* length in bytes of a half signature (r or s) */
     int flen;       /* length in bytes of the field size */
     unsigned olen;  /* length in bytes of the base point order */
+    unsigned obits; /* length in bits  of the base point order */
 
 #if EC_DEBUG
     char mpstr[256];
@@ -979,8 +983,9 @@ ECDSA_VerifyDigest(ECPublicKey *key, const SECItem *signature,
     /* In the definition of EC signing, digests are truncated
      * to the length of n in bits. 
      * (see SEC 1 "Elliptic Curve Digit Signature Algorithm" section 4.1.*/
-    if (digest->len*8 > ecParams->fieldID.size) {  /* u1 = HASH(M')     */
-	mpl_rsh(&u1,&u1,digest->len*8- ecParams->fieldID.size);
+    CHECK_MPI_OK( (obits = mpl_significant_bits(&n)) );
+    if (digest->len*8 > obits) {  /* u1 = HASH(M')     */
+	mpl_rsh(&u1,&u1,digest->len*8 - obits);
     }
 
 #if EC_DEBUG
@@ -1082,7 +1087,7 @@ cleanup:
 #endif
 #else
     PORT_SetError(SEC_ERROR_UNSUPPORTED_KEYALG);
-#endif /* NSS_ENABLE_ECC */
+#endif /* NSS_DISABLE_ECC */
 
     return rv;
 }

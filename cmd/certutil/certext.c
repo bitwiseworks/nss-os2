@@ -1,39 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Netscape security libraries.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1994-2000
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Dr Vipul Gupta <vipul.gupta@sun.com>, Sun Microsystems Laboratories
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
 ** certext.c
@@ -60,6 +27,8 @@
 #include "xconst.h"
 #include "prprf.h"
 #include "certutil.h"
+#include "genname.h"
+#include "prnetdb.h"
 
 #define GEN_BREAK(e) rv=e; break;
 
@@ -111,7 +80,7 @@ PrintChoicesAndGetAnswer(char* str, char* rBuff, int rSize)
 }
 
 static CERTGeneralName *
-GetGeneralName (PRArenaPool *arena)
+GetGeneralName(PLArenaPool *arena, CERTGeneralName *useExistingName, PRBool onlyOne)
 {
     CERTGeneralName *namesList = NULL;
     CERTGeneralName *current;
@@ -157,8 +126,12 @@ GetGeneralName (PRArenaPool *arena)
 	    break;
 	
 	if (namesList == NULL) {
-	    namesList = current = tail =
-		PORT_ArenaZNew(arena, CERTGeneralName);
+            if (useExistingName) {
+                namesList = current = tail = useExistingName;
+            } else {
+                namesList = current = tail =
+                    PORT_ArenaZNew(arena, CERTGeneralName);
+            }
 	} else {
 	    current = PORT_ArenaZNew(arena, CERTGeneralName);
 	}
@@ -233,7 +206,7 @@ GetGeneralName (PRArenaPool *arena)
         tail->l.next = &(current->l);
         tail = current;
         
-    }while (1);
+    }while (!onlyOne);
 
     if (rv != SECSuccess) {
         PORT_ArenaRelease (arena, mark);
@@ -242,8 +215,14 @@ GetGeneralName (PRArenaPool *arena)
     return (namesList);
 }
 
+static CERTGeneralName *
+CreateGeneralName(PLArenaPool *arena)
+{
+  return GetGeneralName(arena, NULL, PR_FALSE);
+}
+
 static SECStatus 
-GetString(PRArenaPool *arena, char *prompt, SECItem *value)
+GetString(PLArenaPool *arena, char *prompt, SECItem *value)
 {
     char buffer[251];
     char *buffPrt;
@@ -401,10 +380,10 @@ static CERTOidSequence *
 CreateOidSequence(void)
 {
     CERTOidSequence *rv = (CERTOidSequence *)NULL;
-    PRArenaPool *arena = (PRArenaPool *)NULL;
+    PLArenaPool *arena = (PLArenaPool *)NULL;
 
     arena = PORT_NewArena(DER_DEFAULT_CHUNKSIZE);
-    if( (PRArenaPool *)NULL == arena ) {
+    if( (PLArenaPool *)NULL == arena ) {
         goto loser;
     }
 
@@ -422,7 +401,7 @@ CreateOidSequence(void)
     return rv;
 
 loser:
-    if( (PRArenaPool *)NULL != arena ) {
+    if( (PLArenaPool *)NULL != arena ) {
         PORT_FreeArena(arena, PR_FALSE);
     }
 
@@ -516,6 +495,7 @@ extKeyUsageKeyWordArray[] = { "serverAuth",
                               "timeStamp",
                               "ocspResponder",
                               "stepUp",
+                              "msTrustListSigning",
                               NULL};
 
 static SECStatus 
@@ -544,6 +524,7 @@ AddExtKeyUsage (void *extHandle, const char *userSuppliedValue)
                     "\t\t4 - Timestamp\n"
                     "\t\t5 - OCSP Responder\n"
                     "\t\t6 - Step-up\n"
+                    "\t\t7 - Microsoft Trust List Signing\n"
                     "\t\tOther to finish\n",
                     buffer, sizeof(buffer)) == SECFailure) {
                 GEN_BREAK(SECFailure);
@@ -586,6 +567,9 @@ AddExtKeyUsage (void *extHandle, const char *userSuppliedValue)
             break;
         case 6:
             rv = AddOidToSequence(os, SEC_OID_NS_KEY_USAGE_GOVT_APPROVED);
+            break;
+        case 7:
+            rv = AddOidToSequence(os, SEC_OID_MS_EXT_KEY_USAGE_CTL_SIGNING);
             break;
         default:
             goto endloop;
@@ -683,53 +667,213 @@ AddNscpCertType (void *extHandle, const char *userSuppliedValue)
 
 }
 
+SECStatus
+GetOidFromString(PLArenaPool *arena, SECItem *to,
+                 const char *from, size_t fromLen)
+{
+    SECStatus rv;
+    SECOidTag tag;
+    SECOidData *coid;
+
+    /* try dotted form first */
+    rv = SEC_StringToOID(arena, to, from, fromLen);
+    if (rv == SECSuccess) {
+        return rv;
+    }
+
+    /* Check to see if it matches a name in our oid table.
+     * SECOID_FindOIDByTag returns NULL if tag is out of bounds.
+     */
+    tag = SEC_OID_UNKNOWN;
+    coid = SECOID_FindOIDByTag(tag);
+    for ( ; coid; coid = SECOID_FindOIDByTag(++tag)) {
+        if (PORT_Strncasecmp(from, coid->desc, fromLen) == 0) {
+            break;
+        }
+    }
+    if (coid == NULL) {
+        /* none found */
+        return SECFailure;
+    }
+    return SECITEM_CopyItem(arena, to, &coid->oid);
+}
+
 static SECStatus 
-AddSubjectAltNames(PRArenaPool *arena, CERTGeneralName **existingListp,
-                   const char *names, CERTGeneralNameType type)
+AddSubjectAltNames(PLArenaPool *arena, CERTGeneralName **existingListp,
+                   const char *constNames, CERTGeneralNameType type)
 {
     CERTGeneralName *nameList = NULL;
     CERTGeneralName *current = NULL;
     PRCList *prev = NULL;
-    const char *cp;
-    char *tbuf;
+    char *cp, *nextName = NULL;
     SECStatus rv = SECSuccess;
+    PRBool readTypeFromName = (PRBool) (type == 0);
+    char *names = NULL;
+    
+    if (constNames)
+        names = PORT_Strdup(constNames);
+
+    if (names == NULL) {
+        return SECFailure;
+    }
 
     /*
      * walk down the comma separated list of names. NOTE: there is
      * no sanity checks to see if the email address look like
      * email addresses.
+     *
+     * Each name may optionally be prefixed with a type: string.
+     * If it isn't, the type from the previous name will be used.
+     * If there wasn't a previous name yet, the type given
+     * as a parameter to this function will be used.
+     * If the type value is zero (undefined), we'll fail.
      */
-    for (cp=names; cp; cp = PORT_Strchr(cp,',')) {
+    for (cp=names; cp; cp=nextName) {
         int len;
-        char *end;
+        char *oidString;
+        char *nextComma;
+        CERTName *name;
+        PRStatus status;
+        unsigned char *data;
+        PRNetAddr addr;
 
+        nextName = NULL;
         if (*cp == ',') {
             cp++;
         }
-        end = PORT_Strchr(cp,',');
-        len = end ? end-cp : PORT_Strlen(cp);
-        if (len <= 0) {
+        nextComma = PORT_Strchr(cp, ',');
+        if (nextComma) {
+            *nextComma = 0;
+            nextName = nextComma+1;
+        }
+        if ((*cp) == 0) {
             continue;
         }
-        tbuf = PORT_ArenaAlloc(arena,len+1);
-        PORT_Memcpy(tbuf,cp,len);
-        tbuf[len] = 0;
-        current = (CERTGeneralName *) PORT_ZAlloc(sizeof(CERTGeneralName));
+        if (readTypeFromName) {
+            char *save=cp;
+            /* Because we already replaced nextComma with end-of-string,
+             * a found colon belongs to the current name */
+            cp = PORT_Strchr(cp, ':');
+            if (cp) {
+                *cp = 0;
+                cp++;
+                type = CERT_GetGeneralNameTypeFromString(save);
+                if (*cp == 0) {
+                    continue;
+                }
+            } else {
+                if (type == 0) {
+                    /* no type known yet */
+                    rv = SECFailure;
+                    break;
+                }
+                cp = save;
+            }
+        }
+
+        current = PORT_ArenaZNew(arena, CERTGeneralName);
         if (!current) {
             rv = SECFailure;
             break;
         }
+
+        current->type = type;
+        switch (type) {
+        /* string types */
+        case certRFC822Name:
+        case certDNSName:
+        case certURI:
+            current->name.other.data =
+                (unsigned char *) PORT_ArenaStrdup(arena,cp);
+            current->name.other.len = PORT_Strlen(cp);
+            break;
+        /* unformated data types */
+        case certX400Address:
+        case certEDIPartyName:
+            /* turn a string into a data and len */
+            rv = SECFailure; /* punt on these for now */
+            fprintf(stderr,"EDI Party Name and X.400 Address not supported\n");
+            break;
+        case certDirectoryName:
+            /* certDirectoryName */
+            name = CERT_AsciiToName(cp);
+            if (name == NULL) {
+                rv = SECFailure;
+                fprintf(stderr, "Invalid Directory Name (\"%s\")\n", cp);
+                break;
+            }
+            rv = CERT_CopyName(arena,&current->name.directoryName,name);
+            CERT_DestroyName(name);
+            break;
+        /* types that require more processing */
+        case certIPAddress:
+            /* convert the string to an ip address */
+            status = PR_StringToNetAddr(cp, &addr);
+            if (status != PR_SUCCESS) {
+                rv = SECFailure;
+                fprintf(stderr, "Invalid IP Address (\"%s\")\n", cp);
+                break;
+            }
+
+            if (PR_NetAddrFamily(&addr) == PR_AF_INET) {
+                len = sizeof(addr.inet.ip);
+                data = (unsigned char *)&addr.inet.ip;
+            } else if (PR_NetAddrFamily(&addr) == PR_AF_INET6) {
+                len = sizeof(addr.ipv6.ip);
+                data = (unsigned char *)&addr.ipv6.ip;
+            } else {
+                fprintf(stderr, "Invalid IP Family\n");
+                rv = SECFailure;
+                break;
+            }
+            current->name.other.data =  PORT_ArenaAlloc(arena, len);
+            if (current->name.other.data == NULL) {
+                rv = SECFailure;
+                break;
+            }
+            current->name.other.len = len;
+            PORT_Memcpy(current->name.other.data,data, len);
+            break;
+        case certRegisterID:
+            rv = GetOidFromString(arena, &current->name.other, cp, strlen(cp));
+            break;
+        case certOtherName:
+            oidString = cp;
+            cp = PORT_Strchr(cp,';');
+            if (cp == NULL) {
+                rv = SECFailure;
+                fprintf(stderr, "missing name in other name\n");
+                break;
+            }
+            *cp++ = 0;
+            current->name.OthName.name.data =
+                (unsigned char *) PORT_ArenaStrdup(arena,cp);
+            if (current->name.OthName.name.data == NULL) {
+                rv = SECFailure;
+                break;
+            }
+            current->name.OthName.name.len = PORT_Strlen(cp);
+            rv = GetOidFromString(arena, &current->name.OthName.oid,
+                                  oidString, strlen(oidString));
+            break;
+        default:
+            rv = SECFailure;
+            fprintf(stderr, "Missing or invalid Subject Alternate Name type\n");
+            break;
+        }
+        if (rv == SECFailure) {
+            break;
+        }
+        
         if (prev) {
             current->l.prev = prev;
             prev->next = &(current->l);
         } else {
             nameList = current;
         }
-        current->type = type;
-        current->name.other.data = (unsigned char *)tbuf;
-        current->name.other.len = PORT_Strlen(tbuf);
         prev = &(current->l);
     }
+    PORT_Free(names);
     /* at this point nameList points to the head of a doubly linked,
      * but not yet circular, list and current points to its tail. */
     if (rv == SECSuccess && nameList) {
@@ -753,7 +897,7 @@ AddSubjectAltNames(PRArenaPool *arena, CERTGeneralName **existingListp,
 }
 
 static SECStatus 
-AddEmailSubjectAlt(PRArenaPool *arena, CERTGeneralName **existingListp,
+AddEmailSubjectAlt(PLArenaPool *arena, CERTGeneralName **existingListp,
                    const char *emailAddrs)
 {
     return AddSubjectAltNames(arena, existingListp, emailAddrs, 
@@ -761,12 +905,18 @@ AddEmailSubjectAlt(PRArenaPool *arena, CERTGeneralName **existingListp,
 }
 
 static SECStatus 
-AddDNSSubjectAlt(PRArenaPool *arena, CERTGeneralName **existingListp,
+AddDNSSubjectAlt(PLArenaPool *arena, CERTGeneralName **existingListp,
                  const char *dnsNames)
 {
     return AddSubjectAltNames(arena, existingListp, dnsNames, certDNSName);
 }
 
+static SECStatus 
+AddGeneralSubjectAlt(PLArenaPool *arena, CERTGeneralName **existingListp,
+                     const char *altNames)
+{
+    return AddSubjectAltNames(arena, existingListp, altNames, 0);
+}
 
 static SECStatus 
 AddBasicConstraint(void *extHandle)
@@ -800,10 +950,108 @@ AddBasicConstraint(void *extHandle)
 }
 
 static SECStatus 
+AddNameConstraints(void *extHandle)
+{
+    PLArenaPool              *arena = NULL;
+    CERTNameConstraints      *constraints = NULL;
+
+    CERTNameConstraint       *current = NULL;
+    CERTNameConstraint       *last_permited = NULL;
+    CERTNameConstraint       *last_excluded = NULL;
+    SECStatus                rv = SECSuccess;
+
+    char buffer[512];
+    int intValue = 0;
+
+    arena = PORT_NewArena(DER_DEFAULT_CHUNKSIZE);
+    if (arena) {
+      constraints = PORT_ArenaZNew(arena, CERTNameConstraints);
+    }
+
+    if (!arena || ! constraints) {
+        SECU_PrintError(progName, "out of memory");
+        PORT_FreeArena(arena, PR_FALSE);
+        return SECFailure;
+    }
+
+    constraints->permited = constraints->excluded = NULL;
+
+    do {
+        current = PORT_ArenaZNew(arena, CERTNameConstraint);
+        if (!current) {
+            GEN_BREAK(SECFailure);
+        }
+
+        (void) SEC_ASN1EncodeInteger(arena, &current->min, 0);
+
+        if (!GetGeneralName(arena, &current->name, PR_TRUE)) {
+            GEN_BREAK(SECFailure);
+        }
+
+        if (PrintChoicesAndGetAnswer("Type of Name Constraint?\n"
+            "\t1 - permitted\n\t2 - excluded\n\tAny"
+            "other number to finish\n\tChoice",
+            buffer, sizeof(buffer)) != SECSuccess) {
+            GEN_BREAK(SECFailure);
+        }
+
+        intValue = PORT_Atoi(buffer);
+        switch (intValue) {
+        case 1:
+            if (constraints->permited == NULL) {
+                constraints->permited = last_permited = current;
+            }
+            last_permited->l.next = &(current->l);
+            current->l.prev = &(last_permited->l);
+            last_permited = current;
+            break;
+        case 2:
+            if (constraints->excluded == NULL) {
+                constraints->excluded = last_excluded = current;
+            }
+            last_excluded->l.next = &(current->l);
+            current->l.prev = &(last_excluded->l);
+            last_excluded = current;
+            break;
+        }
+        
+        PR_snprintf(buffer, sizeof(buffer), "Add another entry to the"
+                    " Name Constraint Extension [y/N]");
+
+        if (GetYesNo (buffer) == 0) {
+            break;
+        }
+
+    } while (1);
+
+    if (rv == SECSuccess) {
+        int oidIdent = SEC_OID_X509_NAME_CONSTRAINTS;
+
+        PRBool yesNoAns = GetYesNo("Is this a critical extension [y/N]?");
+
+        if (constraints->permited != NULL) {
+            last_permited->l.next = &(constraints->permited->l);
+            constraints->permited->l.prev = &(last_permited->l);
+        }
+        if (constraints->excluded != NULL) {
+            last_excluded->l.next = &(constraints->excluded->l);
+            constraints->excluded->l.prev = &(last_excluded->l);
+        }
+
+        rv = SECU_EncodeAndAddExtensionValue(arena, extHandle, constraints,
+                 yesNoAns, oidIdent,
+                 (EXTEN_EXT_VALUE_ENCODER)CERT_EncodeNameConstraintsExtension);
+    }
+    if (arena)
+        PORT_FreeArena(arena, PR_FALSE);
+    return (rv);
+}
+
+static SECStatus 
 AddAuthKeyID (void *extHandle)
 {
     CERTAuthKeyID *authKeyID = NULL;    
-    PRArenaPool *arena = NULL;
+    PLArenaPool *arena = NULL;
     SECStatus rv = SECSuccess;
     PRBool yesNoAns;
 
@@ -829,7 +1077,7 @@ AddAuthKeyID (void *extHandle)
 
         SECU_SECItemHexStringToBinary(&authKeyID->keyID);
 
-        authKeyID->authCertIssuer = GetGeneralName (arena);
+        authKeyID->authCertIssuer = CreateGeneralName (arena);
         if (authKeyID->authCertIssuer == NULL && 
             SECFailure == PORT_GetError ())
             break;
@@ -856,7 +1104,7 @@ static SECStatus
 AddSubjKeyID (void *extHandle)
 {
     SECItem keyID;
-    PRArenaPool *arena = NULL;
+    PLArenaPool *arena = NULL;
     SECStatus rv = SECSuccess;
     PRBool yesNoAns;
 
@@ -892,7 +1140,7 @@ AddSubjKeyID (void *extHandle)
 static SECStatus 
 AddCrlDistPoint(void *extHandle)
 {
-    PRArenaPool *arena = NULL;
+    PLArenaPool *arena = NULL;
     CERTCrlDistributionPoints *crlDistPoints = NULL;
     CRLDistributionPoint *current;
     SECStatus rv = SECSuccess;
@@ -923,7 +1171,7 @@ AddCrlDistPoint(void *extHandle)
         switch (intValue) {
         case generalName:
             current->distPointType = intValue;
-            current->distPoint.fullName = GetGeneralName (arena);
+            current->distPoint.fullName = CreateGeneralName (arena);
             rv = PORT_GetError();
             break;
 
@@ -980,7 +1228,7 @@ AddCrlDistPoint(void *extHandle)
             current->reasons.len = 1;
         }
         puts ("Enter value for the CRL Issuer name:\n");
-        current->crlIssuer = GetGeneralName (arena);
+        current->crlIssuer = CreateGeneralName (arena);
         if (current->crlIssuer == NULL && (rv = PORT_GetError()) == SECFailure)
             break;
 
@@ -1033,7 +1281,7 @@ static SECStatus
 AddPolicyConstraints(void *extHandle)
 {
     CERTCertificatePolicyConstraints *policyConstr;
-    PRArenaPool *arena = NULL;
+    PLArenaPool *arena = NULL;
     SECStatus rv = SECSuccess;
     SECItem *item, *dummy;
     char buffer[512];
@@ -1117,7 +1365,7 @@ static SECStatus
 AddInhibitAnyPolicy(void *extHandle)
 {
     CERTCertificateInhibitAny certInhibitAny;
-    PRArenaPool *arena = NULL;
+    PLArenaPool *arena = NULL;
     SECStatus rv = SECSuccess;
     SECItem *item, *dummy;
     char buffer[10];
@@ -1166,7 +1414,7 @@ AddPolicyMappings(void *extHandle)
 {
     CERTPolicyMap **policyMapArr = NULL;
     CERTPolicyMap *current;
-    PRArenaPool *arena = NULL;
+    PLArenaPool *arena = NULL;
     SECStatus rv = SECSuccess;
     int count = 0;
     char buffer[512];
@@ -1258,7 +1506,7 @@ enum PoliciQualifierEnum {
 
 
 static CERTPolicyQualifier **
-RequestPolicyQualifiers(PRArenaPool *arena, SECItem *policyID)
+RequestPolicyQualifiers(PLArenaPool *arena, SECItem *policyID)
 {
     CERTPolicyQualifier **policyQualifArr = NULL;
     CERTPolicyQualifier *current;
@@ -1453,7 +1701,7 @@ AddCertPolicies(void *extHandle)
 {
     CERTPolicyInfo **certPoliciesArr = NULL;
     CERTPolicyInfo *current;
-    PRArenaPool *arena = NULL;
+    PLArenaPool *arena = NULL;
     SECStatus rv = SECSuccess;
     int count = 0;
     char buffer[512];
@@ -1550,7 +1798,7 @@ AddInfoAccess(void *extHandle, PRBool addSIAExt, PRBool isCACert)
 {
     CERTAuthInfoAccess **infoAccArr = NULL;
     CERTAuthInfoAccess *current;
-    PRArenaPool *arena = NULL;
+    PLArenaPool *arena = NULL;
     SECStatus rv = SECSuccess;
     int count = 0;
     char buffer[512];
@@ -1582,11 +1830,13 @@ AddInfoAccess(void *extHandle, PRBool addSIAExt, PRBool isCACert)
                 intValue = timeStamping;
             }
         } else {
-            PrintChoicesAndGetAnswer("Enter access method type "
+            if (PrintChoicesAndGetAnswer("Enter access method type "
                 "for Authority Information Access extension:\n"
                 "\t1 - CA Issuers\n\t2 - OCSP\n\tAny"
                 "other number to finish\n\tChoice",
-                buffer, sizeof(buffer));
+                buffer, sizeof(buffer)) != SECSuccess) {
+                GEN_BREAK (SECFailure);
+            }
             intValue = PORT_Atoi(buffer);
         }
         if (addSIAExt) {
@@ -1616,7 +1866,7 @@ AddInfoAccess(void *extHandle, PRBool addSIAExt, PRBool isCACert)
             GEN_BREAK (SECFailure);
         }
 
-        current->location = GetGeneralName(arena);
+        current->location = CreateGeneralName(arena);
         if (!current->location) {
             GEN_BREAK(SECFailure);
         }
@@ -1670,12 +1920,73 @@ AddInfoAccess(void *extHandle, PRBool addSIAExt, PRBool isCACert)
     return (rv);
 }
 
+/* Example of valid input:
+ *     1.2.3.4:critical:/tmp/abc,5.6.7.8:not-critical:/tmp/xyz
+ */
+static SECStatus
+parseNextGenericExt(const char *nextExtension, const char **oid, int *oidLen,
+                    const char **crit, int *critLen,
+                    const char **filename, int *filenameLen,
+                    const char **next)
+{
+    const char *nextColon;
+    const char *nextComma;
+    const char *iter = nextExtension;
+    
+    if (!iter || !*iter)
+        return SECFailure;
+
+    /* Require colons at earlier positions than nextComma (or end of string ) */
+    nextComma = strchr(iter, ',');
+
+    *oid = iter;
+    nextColon = strchr(iter, ':');
+    if (!nextColon || (nextComma && nextColon > nextComma))
+        return SECFailure;
+    *oidLen = (nextColon - *oid);
+
+    if (!*oidLen)
+        return SECFailure;
+
+    iter = nextColon;
+    ++iter;
+
+    *crit = iter;
+    nextColon = strchr(iter, ':');
+    if (!nextColon || (nextComma && nextColon > nextComma))
+        return SECFailure;
+    *critLen = (nextColon - *crit);
+
+    if (!*critLen)
+        return SECFailure;
+
+    iter = nextColon;
+    ++iter;
+
+    *filename = iter;
+    if (nextComma) {
+        *filenameLen = (nextComma - *filename);
+        iter = nextComma;
+        ++iter;
+        *next = iter;
+    } else {
+        *filenameLen = strlen(*filename);
+        *next = NULL;
+    }
+
+    if (!*filenameLen)
+        return SECFailure;
+
+    return SECSuccess;
+}
+
 SECStatus
 AddExtensions(void *extHandle, const char *emailAddrs, const char *dnsNames,
-              certutilExtnList extList)
+              certutilExtnList extList, const char *extGeneric)
 {
     SECStatus rv = SECSuccess;
     char *errstring = NULL;
+    const char *nextExtension = NULL;
     
     do {
         /* Add key usage extension */
@@ -1703,6 +2014,15 @@ AddExtensions(void *extHandle, const char *emailAddrs, const char *dnsNames,
 		errstring = "BasicConstraint";
                 break;
 	    }
+        }
+
+        /* Add name constraints extension */
+        if (extList[ext_nameConstraints].activated) {
+            rv = AddNameConstraints(extHandle);
+            if (rv) {
+                errstring = "NameConstraints";
+                break;
+            }
         }
 
         if (extList[ext_authorityKeyID].activated) {
@@ -1779,8 +2099,8 @@ AddExtensions(void *extHandle, const char *emailAddrs, const char *dnsNames,
 	    }
         }
 
-        if (emailAddrs || dnsNames) {
-            PRArenaPool *arena;
+        if (emailAddrs || dnsNames || extList[ext_subjectAltName].activated) {
+            PLArenaPool *arena;
             CERTGeneralName *namelist = NULL;
             SECItem item = { 0, NULL, 0 };
             
@@ -1789,10 +2109,21 @@ AddExtensions(void *extHandle, const char *emailAddrs, const char *dnsNames,
                 rv = SECFailure;
                 break;
             }
+            
+            rv = SECSuccess;
 
-            rv = AddEmailSubjectAlt(arena, &namelist, emailAddrs);
+            if (emailAddrs) {
+                rv |= AddEmailSubjectAlt(arena, &namelist, emailAddrs);
+            }
 
-            rv |= AddDNSSubjectAlt(arena, &namelist, dnsNames);
+            if (dnsNames) {
+                rv |= AddDNSSubjectAlt(arena, &namelist, dnsNames);
+            }
+
+            if (extList[ext_subjectAltName].activated) {
+                rv |= AddGeneralSubjectAlt(arena, &namelist, 
+                                           extList[ext_subjectAltName].arg);
+            }
 
             if (rv == SECSuccess) {
 		rv = CERT_EncodeAltNameExtension(arena, namelist, &item);
@@ -1813,5 +2144,71 @@ AddExtensions(void *extHandle, const char *emailAddrs, const char *dnsNames,
     if (rv != SECSuccess) {
         SECU_PrintError(progName, "Problem creating %s extension", errstring);
     }
+
+    nextExtension = extGeneric;
+    while (nextExtension && *nextExtension) {
+        SECItem oid_item, value;
+        PRBool isCritical;
+        const char *oid, *crit, *filename, *next;
+        int oidLen, critLen, filenameLen;
+        PRFileDesc *inFile = NULL;
+        char *zeroTerminatedFilename = NULL;
+
+        rv = parseNextGenericExt(nextExtension, &oid, &oidLen, &crit, &critLen,
+                                 &filename, &filenameLen, &next);
+        if (rv!= SECSuccess) {
+            SECU_PrintError(progName,
+                            "error parsing generic extension parameter %s",
+                            nextExtension);
+            break;
+        }
+        oid_item.data = NULL;
+        oid_item.len = 0;
+        rv = GetOidFromString(NULL, &oid_item, oid, oidLen);
+        if (rv != SECSuccess) {
+            SECU_PrintError(progName, "malformed extension OID %s", nextExtension);
+            break;
+        }
+        if (!strncmp("critical", crit, critLen)) {
+            isCritical = PR_TRUE;
+        } else if (!strncmp("not-critical", crit, critLen)) {
+            isCritical = PR_FALSE;
+        } else {
+            rv = SECFailure;
+            SECU_PrintError(progName, "expected 'critical' or 'not-critical'");
+            break;
+        }
+        zeroTerminatedFilename = PL_strndup(filename, filenameLen);
+        if (!zeroTerminatedFilename) {
+            rv = SECFailure;
+            SECU_PrintError(progName, "out of memory");
+            break;
+        }
+        rv = SECFailure;
+        inFile = PR_Open(zeroTerminatedFilename, PR_RDONLY, 0);
+        if (inFile) {
+            rv = SECU_ReadDERFromFile(&value, inFile, PR_FALSE, PR_FALSE);
+            PR_Close(inFile);
+            inFile = NULL;
+        }
+        if (rv != SECSuccess) {
+            SECU_PrintError(progName, "unable to read file %s",
+                            zeroTerminatedFilename);
+        }
+        PL_strfree(zeroTerminatedFilename);
+        if (rv != SECSuccess) {
+            break;
+        }
+        rv = CERT_AddExtensionByOID(extHandle, &oid_item, &value, isCritical,
+                                    PR_FALSE /*copyData*/);
+        if (rv != SECSuccess) {
+            SECITEM_FreeItem(&oid_item, PR_FALSE);
+            SECITEM_FreeItem(&value, PR_FALSE);
+            SECU_PrintError(progName, "failed to add extension %s", nextExtension);
+            break;
+        }
+        nextExtension = next;
+    }
+
     return rv;
 }

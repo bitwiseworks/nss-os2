@@ -1,42 +1,8 @@
 #! gmake
 #
-# ***** BEGIN LICENSE BLOCK *****
-# Version: MPL 1.1/GPL 2.0/LGPL 2.1
-#
-# The contents of this file are subject to the Mozilla Public License Version
-# 1.1 (the "License"); you may not use this file except in compliance with
-# the License. You may obtain a copy of the License at
-# http://www.mozilla.org/MPL/
-#
-# Software distributed under the License is distributed on an "AS IS" basis,
-# WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
-# for the specific language governing rights and limitations under the
-# License.
-#
-# The Original Code is the Netscape security libraries.
-#
-# The Initial Developer of the Original Code is
-# Netscape Communications Corporation.
-# Portions created by the Initial Developer are Copyright (C) 1994-2000
-# the Initial Developer. All Rights Reserved.
-#
-# Contributor(s):
-#   Stephen Fung <fungstep@hotmail.com> and
-#   Douglas Stebila <douglas@stebila.ca>, Sun Microsystems Laboratories
-#
-# Alternatively, the contents of this file may be used under the terms of
-# either the GNU General Public License Version 2 or later (the "GPL"), or
-# the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
-# in which case the provisions of the GPL or the LGPL are applicable instead
-# of those above. If you wish to allow use of your version of this file only
-# under the terms of either the GPL or the LGPL, and not to allow others to
-# use your version of this file under the terms of the MPL, indicate your
-# decision by deleting the provisions above and replace them with the notice
-# and other provisions required by the GPL or the LGPL. If you do not delete
-# the provisions above, a recipient may use your version of this file under
-# the terms of any one of the MPL, the GPL or the LGPL.
-#
-# ***** END LICENSE BLOCK *****
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 #######################################################################
 # (1) Include initial platform-independent assignments (MANDATORY).   #
@@ -76,18 +42,60 @@ endif
 
 ifeq ($(FREEBL_NO_DEPEND),1)
 	DEFINES += -DFREEBL_NO_DEPEND
-	LOWHASH_SRCS = stubs.c nsslowhash.c
+	STUBS_SRCS = stubs.c
+endif
+
+ifeq ($(FREEBL_LOWHASH),1)
+	LOWHASH_SRCS = nsslowhash.c
 	LOWHASH_EXPORTS = nsslowhash.h
 	MAPFILE_SOURCE = freebl_hash.def
 else
 	MAPFILE_SOURCE = freebl.def
 endif
+
+# FREEBL_USE_PRELINK
+#
+# Most modern version of Linux support a speed optimization scheme where an
+# application called prelink modifies programs and shared libraries to quickly
+# load if they fit into an already designed address space. In short, prelink
+# scans the list of programs and libraries on your system, assigns them a
+# predefined space in the the address space, then provides the fixups to the
+# library.
+#
+# The modification of the shared library is correctly detected by the freebl
+# FIPS checksum scheme where we check a signed hash of the library against the
+# library itself.
+#
+# The prelink command itself can reverse the process of modification and output
+# the prestine shared library as it was before prelink made it's changes.
+# This option tells Freebl could use prelink to output the original copy of
+# the shared library before prelink modified it.
+#
+# FREEBL_PRELINK_COMMAND
+#
+# This is an optional environment variable which can override the default
+# prelink command. It could be used on systems that did something similiar to 
+# prelink but used a different command and syntax. The only requirement is the 
+# program must take the library as the last argument, the program must output 
+# the original library to standard out, and the program does not need to take 
+# any quoted or imbedded spaces in its arguments (except the path to the 
+# library itself, which can have imbedded spaces or special characters).
+#
+ifdef FREEBL_USE_PRELINK
+	DEFINES += -DFREEBL_USE_PRELINK
+ifdef LINUX
+	DEFINES += -D__GNU_SOURCE=1
+endif
+endif
+ifdef FREEBL_PRELINK_COMMAND
+	DEFINES +=-DFREEBL_PRELINK_COMMAND=\"$(FREEBL_PRELINK_COMMAND)\"
+endif
 # NSS_X86 means the target is a 32-bits x86 CPU architecture
-# NSS_X64 means the target is a 64-bits x64 CPU architecture
+# NSS_X64 means the target is a 64-bits 64 CPU architecture
 # NSS_X86_OR_X64 means the target is either x86 or x64
-ifeq (,$(filter-out x386 x86 x86_64,$(CPU_ARCH)))
+ifeq (,$(filter-out i386 x386 x86 x86_64,$(CPU_ARCH)))
         DEFINES += -DNSS_X86_OR_X64
-ifdef USE_64
+ifneq (,$(USE_64)$(USE_X32))
         DEFINES += -DNSS_X64
 else
         DEFINES += -DNSS_X86
@@ -107,7 +115,7 @@ ifeq (OS2,$(OS_TARGET))
     DEFINES += -DMP_CHAR_STORE_SLOW -DMP_IS_LITTLE_ENDIAN
 endif
 
-ifeq (,$(filter-out WINNT WIN95,$(OS_TARGET)))  #omits WINCE
+ifeq (,$(filter-out WINNT WIN95,$(OS_TARGET)))
 ifndef USE_64
 # 32-bit Windows
 ifdef NS_USE_GCC
@@ -127,23 +135,44 @@ else
     ifdef BUILD_OPT
 	OPTIMIZER += -Ox  # maximum optimization for freebl
     endif
+    # The Intel AES assembly code requires Visual C++ 2010.
+    # if $(_MSC_VER) >= 1600 (Visual C++ 2010)
+    ifeq ($(firstword $(sort $(_MSC_VER) 1600)),1600)
+	DEFINES += -DUSE_HW_AES -DINTEL_GCM
+	ASFILES += intel-aes-x86-masm.asm intel-gcm-x86-masm.asm
+	EXTRA_SRCS += intel-gcm-wrap.c
+	ifeq ($(CLANG_CL),1)
+	    INTEL_GCM_CLANG_CL = 1
+	endif
+    endif
 endif
 else
     # -DMP_NO_MP_WORD
+    DEFINES += -DMP_CHAR_STORE_SLOW -DMP_IS_LITTLE_ENDIAN
+ifdef NS_USE_GCC
+# Ideally, we should use amd64 assembly code, but it's not yet mingw-w64
+# compatible.
+else
+# MSVC
     ifdef BUILD_OPT
 	OPTIMIZER += -Ox  # maximum optimization for freebl
     endif
     ASFILES  = arcfour-amd64-masm.asm mpi_amd64_masm.asm mp_comba_amd64_masm.asm
     DEFINES += -DNSS_BEVAND_ARCFOUR -DMPI_AMD64 -DMP_ASSEMBLY_MULTIPLY
     DEFINES += -DNSS_USE_COMBA
-    DEFINES += -DMP_CHAR_STORE_SLOW -DMP_IS_LITTLE_ENDIAN
+    # The Intel AES assembly code requires Visual C++ 2010 (10.0). The _xgetbv
+    # compiler intrinsic function requires Visual C++ 2010 (10.0) SP1.
+    ifeq ($(_MSC_VER_GE_10SP1),1)
+	DEFINES += -DUSE_HW_AES -DINTEL_GCM
+	ASFILES += intel-aes-x64-masm.asm intel-gcm-x64-masm.asm
+	EXTRA_SRCS += intel-gcm-wrap.c
+	ifeq ($(CLANG_CL),1)
+	    INTEL_GCM_CLANG_CL = 1
+	endif
+    endif
     MPI_SRCS += mpi_amd64.c
 endif
 endif
-
-ifeq ($(OS_TARGET),WINCE)
-    DEFINES += -DMP_ARGCHK=0	# no assert in WinCE
-    DEFINES += -DSHA_NO_LONG_LONG # avoid 64-bit arithmetic in SHA512
 endif
 
 ifeq ($(OS_TARGET),IRIX)
@@ -159,26 +188,43 @@ ifeq ($(USE_N32),1)
 endif
 endif
 
+ifeq ($(OS_TARGET),Darwin)
+ifeq ($(CPU_ARCH),x86)
+    ASFILES  = mpi_sse2.s
+    DEFINES += -DMP_USE_UINT_DIGIT
+    DEFINES += -DMP_ASSEMBLY_MULTIPLY -DMP_ASSEMBLY_SQUARE
+    DEFINES += -DMP_ASSEMBLY_DIV_2DX1D
+endif
+endif # Darwin
+
 ifeq ($(OS_TARGET),Linux)
 ifeq ($(CPU_ARCH),x86_64)
     ASFILES  = arcfour-amd64-gas.s mpi_amd64_gas.s
-    ASFLAGS += -march=opteron -m64 -fPIC -Wa,--noexecstack
+    ASFLAGS += -fPIC -Wa,--noexecstack
     DEFINES += -DNSS_BEVAND_ARCFOUR -DMPI_AMD64 -DMP_ASSEMBLY_MULTIPLY
     DEFINES += -DNSS_USE_COMBA
     DEFINES += -DMP_CHAR_STORE_SLOW -DMP_IS_LITTLE_ENDIAN
 #   DEFINES += -DMPI_AMD64_ADD
-    # comment the next two lines to turn off intel HW accelleration
-#    DEFINES += -DUSE_HW_AES
-#    ASFILES += intel-aes.s
+    # comment the next four lines to turn off Intel HW acceleration.
+    DEFINES += -DUSE_HW_AES -DINTEL_GCM
+    ASFILES += intel-aes.s intel-gcm.s
+    EXTRA_SRCS += intel-gcm-wrap.c
+    INTEL_GCM = 1
     MPI_SRCS += mpi_amd64.c mp_comba.c
 endif
 ifeq ($(CPU_ARCH),x86)
     ASFILES  = mpi_x86.s
     DEFINES += -DMP_ASSEMBLY_MULTIPLY -DMP_ASSEMBLY_SQUARE 
-    DEFINES += -DMP_ASSEMBLY_DIV_2DX1D
+    DEFINES += -DMP_ASSEMBLY_DIV_2DX1D -DMP_USE_UINT_DIGIT
     DEFINES += -DMP_CHAR_STORE_SLOW -DMP_IS_LITTLE_ENDIAN
     # The floating point ECC code doesn't work on Linux x86 (bug 311432).
     #ECL_USE_FP = 1
+endif
+ifeq ($(CPU_ARCH),arm)
+    DEFINES += -DMP_ASSEMBLY_MULTIPLY -DMP_ASSEMBLY_SQUARE 
+    DEFINES += -DMP_USE_UINT_DIGIT
+    DEFINES += -DSHA_NO_LONG_LONG # avoid 64-bit arithmetic in SHA512
+    MPI_SRCS += mpi_arm.c
 endif
 endif # Linux
 
@@ -215,7 +261,9 @@ else
     MPI_SRCS += mpi_hp.c 
     ASFILES  += hpma512.s hppa20.s 
     DEFINES  += -DMP_ASSEMBLY_MULTIPLY -DMP_ASSEMBLY_SQUARE
+ifndef NS_USE_GCC
     ARCHFLAG = -Aa +e +DA2.0 +DS2.0
+endif
 endif
 endif
 endif
@@ -256,7 +304,6 @@ ifeq ($(CPU_ARCH),sparc)
         HAVE_ABI64_INT = 1
         HAVE_ABI64_FPU = 1
     else
-        HAVE_ABI32_INT32 = 1
         HAVE_ABI32_FPU = 1
         HAVE_ABI32_INT64 = 1
     endif
@@ -264,9 +311,6 @@ ifeq ($(CPU_ARCH),sparc)
     SOLARIS_AS = /usr/ccs/bin/as
     #### set arch, asm, c flags
     ifdef NS_USE_GCC
-	ifdef USE_ABI32_INT32
-	    # default ARCHFLAG=-mcpu=v8 set by coreconf/sunOS5.mk
-	endif
 	ifdef USE_ABI32_INT64
 	    ARCHFLAG=-mcpu=v9 -Wa,-xarch=v8plus
 	    SOLARIS_AS_FLAGS = -xarch=v8plus -K PIC
@@ -298,9 +342,6 @@ ifeq ($(CPU_ARCH),sparc)
 	    # if -xchip=ultra3 is used (Bugzilla bug 333925).  So we revert
 	    # to what we used in NSS 3.10.
 	    FPU_TARGET_OPTIMIZER = -xchip=ultra2
-	endif
-	ifdef USE_ABI32_INT32
-	    #ARCHFLAG=-xarch=v8 set in coreconf/sunOS5.mk
 	endif
 	ifdef USE_ABI32_INT64
 	    # this builds for Sparc v8+a ABI32_FPU architecture, 64-bit registers, 
@@ -357,12 +398,6 @@ ifeq ($(CPU_ARCH),sparc)
     endif # NS_USE_GCC
 
     ### set flags for both GCC and Sun cc
-    ifdef USE_ABI32_INT32
-	# this builds for Sparc v8 pure 32-bit architecture
-	DEFINES += -DMP_USE_UINT_DIGIT -DMP_ASSEMBLY_MULTIPLY
-	ASFILES  = mpv_sparcv8x.s
-	DEFINES += -DSHA_NO_LONG_LONG # avoid 64-bit arithmetic in SHA512
-    endif
     ifdef USE_ABI32_INT64
 	# this builds for Sparc v8+a ABI32_FPU architecture, 64-bit registers, 
 	# 32-bit ABI, it uses 64-bit words, integer arithmetic, no FPU
@@ -404,6 +439,11 @@ else
 	    ASFILES  = arcfour-amd64-gas.s mpi_amd64_gas.s
 	    ASFLAGS += -march=opteron -m64 -fPIC
 	    MPI_SRCS += mp_comba.c
+	    # comment the next four lines to turn off Intel HW acceleration
+	    ASFILES += intel-gcm.s
+	    EXTRA_SRCS += intel-gcm-wrap.c
+	    INTEL_GCM = 1
+	    DEFINES += -DINTEL_GCM
 	else
 	    ASFILES  = arcfour-amd64-sun.s mpi_amd64_sun.s sha-fast-amd64-sun.s
  	    ASFILES += mp_comba_amd64_sun.s mpcpucache_amd64.s
@@ -411,12 +451,13 @@ else
             SOL_CFLAGS += -xprefetch=no
 	    SHA_SRCS =
  	    MPCPU_SRCS =
+	    # Intel acceleration for GCM does not build currently with Studio
 	endif
 	DEFINES += -DNSS_BEVAND_ARCFOUR -DMPI_AMD64 -DMP_ASSEMBLY_MULTIPLY
 	DEFINES += -DNSS_USE_COMBA -DMP_CHAR_STORE_SLOW -DMP_IS_LITTLE_ENDIAN
-	# comment the next two lines to turn off intel HW accelleration
-#	DEFINES += -DUSE_HW_AES
-#	ASFILES += intel-aes.s
+	# comment the next two lines to turn off Intel HW acceleration
+	DEFINES += -DUSE_HW_AES
+	ASFILES += intel-aes.s
 	MPI_SRCS += mpi_amd64.c
     else
 	# Solaris x86
@@ -432,14 +473,41 @@ else
 endif # Solaris for non-sparc family CPUs
 endif # target == SunOS
 
-ifdef NSS_ENABLE_ECC
+ifndef NSS_DISABLE_ECC
     ifdef ECL_USE_FP
 	#enable floating point ECC code	
 	DEFINES  += -DECL_USE_FP
 	ECL_SRCS += ecp_fp160.c ecp_fp192.c ecp_fp224.c ecp_fp.c
 	ECL_HDRS += ecp_fp.h
     endif
-endif # NSS_ENABLE_ECC
+endif
+
+# poly1305-donna-x64-sse2-incremental-source.c requires __int128 support
+# in GCC 4.6.0.
+ifeq ($(CC_NAME),clang)
+    HAVE_INT128_SUPPORT = 1
+else ifeq (1,$(CC_IS_GCC))
+    ifneq (,$(filter 4.6 4.7 4.8 4.9,$(word 1,$(GCC_VERSION)).$(word 2,$(GCC_VERSION))))
+        HAVE_INT128_SUPPORT = 1
+    endif
+    ifeq (,$(filter 0 1 2 3 4,$(word 1,$(GCC_VERSION))))
+        HAVE_INT128_SUPPORT = 1
+    endif
+endif
+
+ifndef NSS_DISABLE_CHACHAPOLY
+    ifeq ($(CPU_ARCH),x86_64)
+        ifdef HAVE_INT128_SUPPORT
+            EXTRA_SRCS += poly1305-donna-x64-sse2-incremental-source.c
+        else
+            EXTRA_SRCS += poly1305.c
+        endif
+        EXTRA_SRCS += chacha20_vec.c
+    else
+        EXTRA_SRCS += poly1305.c
+        EXTRA_SRCS += chacha20.c
+    endif # x86_64
+endif # NSS_DISABLE_CHACHAPOLY
 
 #######################################################################
 # (5) Execute "global" rules. (OPTIONAL)                              #
@@ -521,7 +589,7 @@ SINGLE_SHLIB_DIR = $(OBJDIR)/$(OS_TARGET)_SINGLE_SHLIB
 ALL_TRASH += $(SINGLE_SHLIB_DIR) 
 
 $(SINGLE_SHLIB_DIR):
-	-mkdir $(SINGLE_SHLIB_DIR)
+	-mkdir -p $(SINGLE_SHLIB_DIR)
 
 release_md libs:: $(SINGLE_SHLIB_DIR)
 	$(MAKE) FREEBL_CHILD_BUILD=1 \
@@ -616,4 +684,27 @@ else
 	$(CC) -o $@ -c $(CFLAGS) -fno-strict-aliasing $<
 endif
 endif
+endif
+
+ifdef INTEL_GCM
+#
+# GCM binary needs -mssse3
+#
+$(OBJDIR)/$(PROG_PREFIX)intel-gcm-wrap$(OBJ_SUFFIX): CFLAGS += -mssse3
+
+# The integrated assembler in Clang 3.2 does not support % in the
+# expression of a .set directive. intel-gcm.s uses .set to give
+# symbolic names to registers, for example,
+#     .set  Htbl, %rdi
+# So we can't use Clang's integrated assembler with intel-gcm.s.
+ifneq (,$(findstring clang,$(shell $(AS) --version)))
+$(OBJDIR)/$(PROG_PREFIX)intel-gcm$(OBJ_SUFFIX): ASFLAGS += -no-integrated-as
+endif
+endif
+
+ifdef INTEL_GCM_CLANG_CL
+#
+# clang-cl needs -mssse3
+#
+$(OBJDIR)/$(PROG_PREFIX)intel-gcm-wrap$(OBJ_SUFFIX): CFLAGS += -mssse3
 endif

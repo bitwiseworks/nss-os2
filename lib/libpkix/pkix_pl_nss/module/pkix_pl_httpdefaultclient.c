@@ -1,39 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the PKIX-C library.
- *
- * The Initial Developer of the Original Code is
- * Sun Microsystems, Inc.
- * Portions created by the Initial Developer are
- * Copyright 2004-2007 Sun Microsystems, Inc.  All Rights Reserved.
- *
- * Contributor(s):
- *   Sun Microsystems, Inc.
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 /*
  * pkix_pl_httpdefaultclient.c
  *
@@ -298,7 +265,7 @@ pkix_pl_HttpDefaultClient_HdrCheckComplete(
              contentLength =                 /* Try to reserve 4K+ buffer */
                  client->filledupBytes + HTTP_DATA_BUFSIZE;
              if (client->maxResponseLen > 0 &&
-                 contentLength > client->maxResponseLen) {
+                 contentLength > (PKIX_Int32)client->maxResponseLen) {
                  if (client->filledupBytes < client->maxResponseLen) {
                      contentLength = client->maxResponseLen;
                  } else {
@@ -315,7 +282,7 @@ pkix_pl_HttpDefaultClient_HdrCheckComplete(
          default:
              client->rcv_http_data_len = contentLength;
              if (client->maxResponseLen > 0 &&
-                 client->maxResponseLen < contentLength) {
+                 (PKIX_Int32)client->maxResponseLen < contentLength) {
                  client->connectStatus = HTTP_ERROR;
                  goto cleanup;
              }
@@ -323,7 +290,7 @@ pkix_pl_HttpDefaultClient_HdrCheckComplete(
              /*
               * Do we have all of the message body, or do we need to read some more?
               */
-             if (client->filledupBytes < contentLength) {
+             if ((PKIX_Int32)client->filledupBytes < contentLength) {
                  client->connectStatus = HTTP_RECV_BODY;
                  *pKeepGoing = PKIX_TRUE;
              } else {
@@ -968,7 +935,7 @@ pkix_pl_HttpDefaultClient_RecvBody(
                  * plus remaining capacity, plus new expansion. */
                 int currBuffSize = client->capacity;
                 /* Try to increase the buffer by 4K */
-                int newLength = currBuffSize + HTTP_DATA_BUFSIZE;
+                unsigned int newLength = currBuffSize + HTTP_DATA_BUFSIZE;
                 if (client->maxResponseLen > 0 &&
                     newLength > client->maxResponseLen) {
                         newLength = client->maxResponseLen;
@@ -1165,8 +1132,6 @@ pkix_pl_HttpDefaultClient_KeepAliveSession(
         PRPollDesc **pPollDesc,
         void *plContext)
 {
-        PKIX_PL_HttpDefaultClient *client = NULL;
-
         PKIX_ENTER
                 (HTTPDEFAULTCLIENT,
                 "pkix_pl_HttpDefaultClient_KeepAliveSession");
@@ -1177,8 +1142,6 @@ pkix_pl_HttpDefaultClient_KeepAliveSession(
                 PKIX_HTTPDEFAULTCLIENT_TYPE,
                 plContext),
                 PKIX_SESSIONNOTANHTTPDEFAULTCLIENT);
-
-        client = (PKIX_PL_HttpDefaultClient *)session;
 
         /* XXX Not implemented */
 
@@ -1350,6 +1313,7 @@ pkix_pl_HttpDefaultClient_TrySendAndReceive(
         PKIX_UInt32 postLen = 0;
         PRPollDesc *pollDesc = NULL;
         char *sendbuf = NULL;
+        char portstr[16];
 
         PKIX_ENTER
                 (HTTPDEFAULTCLIENT,
@@ -1393,13 +1357,19 @@ pkix_pl_HttpDefaultClient_TrySendAndReceive(
                 client->rcv_http_data = http_response_data;
 
                 /* prepare the message */
+                portstr[0] = '\0';
+                if (client->portnum != 80) {
+                        PR_snprintf(portstr, sizeof(portstr), ":%d", 
+                                    client->portnum);
+                }
+                
                 if (client->send_http_method == HTTP_POST_METHOD) {
                         sendbuf = PR_smprintf
-                            ("POST %s HTTP/1.0\r\nHost: %s:%d\r\n"
+                            ("POST %s HTTP/1.0\r\nHost: %s%s\r\n"
                             "Content-Type: %s\r\nContent-Length: %u\r\n\r\n",
                             client->path,
                             client->host,
-                            client->portnum,
+                            portstr,
                             client->send_http_content_type,
                             client->send_http_data_len);
                         postLen = PORT_Strlen(sendbuf);
@@ -1427,10 +1397,10 @@ pkix_pl_HttpDefaultClient_TrySendAndReceive(
                         
                 } else if (client->send_http_method == HTTP_GET_METHOD) {
                         client->GETBuf = PR_smprintf
-                            ("GET %s HTTP/1.1\r\nHost: %s:%d\r\n\r\n",
+                            ("GET %s HTTP/1.0\r\nHost: %s%s\r\n\r\n",
                             client->path,
                             client->host,
-                            client->portnum);
+                            portstr);
                         client->GETLen = PORT_Strlen(client->GETBuf);
                 }
 
@@ -1510,8 +1480,6 @@ pkix_pl_HttpDefaultClient_Cancel(
         SEC_HTTP_REQUEST_SESSION request,
         void *plContext)
 {
-        PKIX_PL_HttpDefaultClient *client = NULL;
-
         PKIX_ENTER(HTTPDEFAULTCLIENT, "pkix_pl_HttpDefaultClient_Cancel");
         PKIX_NULLCHECK_ONE(request);
 
@@ -1520,8 +1488,6 @@ pkix_pl_HttpDefaultClient_Cancel(
                 PKIX_HTTPDEFAULTCLIENT_TYPE,
                 plContext),
                 PKIX_REQUESTNOTANHTTPDEFAULTCLIENT);
-
-        client = (PKIX_PL_HttpDefaultClient *)request;
 
         /* XXX Not implemented */
 

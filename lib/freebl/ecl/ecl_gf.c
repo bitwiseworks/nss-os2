@@ -1,41 +1,6 @@
-/* 
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the elliptic curve math library.
- *
- * The Initial Developer of the Original Code is
- * Sun Microsystems, Inc.
- * Portions created by the Initial Developer are Copyright (C) 2003
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Stephen Fung <fungstep@hotmail.com> and
- *   Douglas Stebila <douglas@stebila.ca>, Sun Microsystems Laboratories
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "mpi.h"
 #include "mp_gf2m.h"
@@ -277,9 +242,10 @@ ec_GFp_add_3(const mp_int *a, const mp_int *b, mp_int *r,
 	}
 
 #ifndef MPI_AMD64_ADD
-	MP_ADD_CARRY(a0, r0, r0, 0,     carry);
-	MP_ADD_CARRY(a1, r1, r1, carry, carry);
-	MP_ADD_CARRY(a2, r2, r2, carry, carry);
+        carry = 0;
+	MP_ADD_CARRY(a0, r0, r0, carry);
+	MP_ADD_CARRY(a1, r1, r1, carry);
+	MP_ADD_CARRY(a2, r2, r2, carry);
 #else
 	__asm__ (
                 "xorq   %3,%3           \n\t"
@@ -308,9 +274,10 @@ ec_GFp_add_3(const mp_int *a, const mp_int *b, mp_int *r,
 		a1 = MP_DIGIT(&meth->irr,1);
 		a0 = MP_DIGIT(&meth->irr,0);
 #ifndef MPI_AMD64_ADD
-		MP_SUB_BORROW(r0, a0, r0, 0,     carry);
-		MP_SUB_BORROW(r1, a1, r1, carry, carry);
-		MP_SUB_BORROW(r2, a2, r2, carry, carry);
+                carry = 0;
+		MP_SUB_BORROW(r0, a0, r0, carry);
+		MP_SUB_BORROW(r1, a1, r1, carry);
+		MP_SUB_BORROW(r2, a2, r2, carry);
 #else
 		__asm__ (
 			"subq   %3,%0           \n\t"
@@ -364,10 +331,11 @@ ec_GFp_add_4(const mp_int *a, const mp_int *b, mp_int *r,
 	}
 
 #ifndef MPI_AMD64_ADD
-	MP_ADD_CARRY(a0, r0, r0, 0,     carry);
-	MP_ADD_CARRY(a1, r1, r1, carry, carry);
-	MP_ADD_CARRY(a2, r2, r2, carry, carry);
-	MP_ADD_CARRY(a3, r3, r3, carry, carry);
+        carry = 0;
+	MP_ADD_CARRY(a0, r0, r0, carry);
+	MP_ADD_CARRY(a1, r1, r1, carry);
+	MP_ADD_CARRY(a2, r2, r2, carry);
+	MP_ADD_CARRY(a3, r3, r3, carry);
 #else
 	__asm__ (
                 "xorq   %4,%4           \n\t"
@@ -399,10 +367,11 @@ ec_GFp_add_4(const mp_int *a, const mp_int *b, mp_int *r,
 		a1 = MP_DIGIT(&meth->irr,1);
 		a0 = MP_DIGIT(&meth->irr,0);
 #ifndef MPI_AMD64_ADD
-		MP_SUB_BORROW(r0, a0, r0, 0,     carry);
-		MP_SUB_BORROW(r1, a1, r1, carry, carry);
-		MP_SUB_BORROW(r2, a2, r2, carry, carry);
-		MP_SUB_BORROW(r3, a3, r3, carry, carry);
+                carry = 0;
+		MP_SUB_BORROW(r0, a0, r0, carry);
+		MP_SUB_BORROW(r1, a1, r1, carry);
+		MP_SUB_BORROW(r2, a2, r2, carry);
+		MP_SUB_BORROW(r3, a3, r3, carry);
 #else
 		__asm__ (
 			"subq   %4,%0           \n\t"
@@ -461,11 +430,12 @@ ec_GFp_add_5(const mp_int *a, const mp_int *b, mp_int *r,
 		r0 = MP_DIGIT(b,0);
 	}
 
-	MP_ADD_CARRY(a0, r0, r0, 0,     carry);
-	MP_ADD_CARRY(a1, r1, r1, carry, carry);
-	MP_ADD_CARRY(a2, r2, r2, carry, carry);
-	MP_ADD_CARRY(a3, r3, r3, carry, carry);
-	MP_ADD_CARRY(a4, r4, r4, carry, carry);
+        carry = 0;
+	MP_ADD_CARRY(a0, r0, r0, carry);
+	MP_ADD_CARRY(a1, r1, r1, carry);
+	MP_ADD_CARRY(a2, r2, r2, carry);
+	MP_ADD_CARRY(a3, r3, r3, carry);
+	MP_ADD_CARRY(a4, r4, r4, carry);
 
 	MP_CHECKOK(s_mp_pad(r, 5));
 	MP_DIGIT(r, 4) = r4;
@@ -485,11 +455,12 @@ ec_GFp_add_5(const mp_int *a, const mp_int *b, mp_int *r,
 		a2 = MP_DIGIT(&meth->irr,2);
 		a1 = MP_DIGIT(&meth->irr,1);
 		a0 = MP_DIGIT(&meth->irr,0);
-		MP_SUB_BORROW(r0, a0, r0, 0,     carry);
-		MP_SUB_BORROW(r1, a1, r1, carry, carry);
-		MP_SUB_BORROW(r2, a2, r2, carry, carry);
-		MP_SUB_BORROW(r3, a3, r3, carry, carry);
-		MP_SUB_BORROW(r4, a4, r4, carry, carry);
+                carry = 0;
+		MP_SUB_BORROW(r0, a0, r0, carry);
+		MP_SUB_BORROW(r1, a1, r1, carry);
+		MP_SUB_BORROW(r2, a2, r2, carry);
+		MP_SUB_BORROW(r3, a3, r3, carry);
+		MP_SUB_BORROW(r4, a4, r4, carry);
 		MP_DIGIT(r, 4) = r4;
 		MP_DIGIT(r, 3) = r3;
 		MP_DIGIT(r, 2) = r2;
@@ -542,12 +513,13 @@ ec_GFp_add_6(const mp_int *a, const mp_int *b, mp_int *r,
 		r0 = MP_DIGIT(b,0);
 	}
 
-	MP_ADD_CARRY(a0, r0, r0, 0,     carry);
-	MP_ADD_CARRY(a1, r1, r1, carry, carry);
-	MP_ADD_CARRY(a2, r2, r2, carry, carry);
-	MP_ADD_CARRY(a3, r3, r3, carry, carry);
-	MP_ADD_CARRY(a4, r4, r4, carry, carry);
-	MP_ADD_CARRY(a5, r5, r5, carry, carry);
+        carry = 0;
+	MP_ADD_CARRY(a0, r0, r0, carry);
+	MP_ADD_CARRY(a1, r1, r1, carry);
+	MP_ADD_CARRY(a2, r2, r2, carry);
+	MP_ADD_CARRY(a3, r3, r3, carry);
+	MP_ADD_CARRY(a4, r4, r4, carry);
+	MP_ADD_CARRY(a5, r5, r5, carry);
 
 	MP_CHECKOK(s_mp_pad(r, 6));
 	MP_DIGIT(r, 5) = r5;
@@ -569,12 +541,13 @@ ec_GFp_add_6(const mp_int *a, const mp_int *b, mp_int *r,
 		a2 = MP_DIGIT(&meth->irr,2);
 		a1 = MP_DIGIT(&meth->irr,1);
 		a0 = MP_DIGIT(&meth->irr,0);
-		MP_SUB_BORROW(r0, a0, r0, 0,     carry);
-		MP_SUB_BORROW(r1, a1, r1, carry, carry);
-		MP_SUB_BORROW(r2, a2, r2, carry, carry);
-		MP_SUB_BORROW(r3, a3, r3, carry, carry);
-		MP_SUB_BORROW(r4, a4, r4, carry, carry);
-		MP_SUB_BORROW(r5, a5, r5, carry, carry);
+                carry = 0;
+		MP_SUB_BORROW(r0, a0, r0, carry);
+		MP_SUB_BORROW(r1, a1, r1, carry);
+		MP_SUB_BORROW(r2, a2, r2, carry);
+		MP_SUB_BORROW(r3, a3, r3, carry);
+		MP_SUB_BORROW(r4, a4, r4, carry);
+		MP_SUB_BORROW(r5, a5, r5, carry);
 		MP_DIGIT(r, 5) = r5;
 		MP_DIGIT(r, 4) = r4;
 		MP_DIGIT(r, 3) = r3;
@@ -622,9 +595,10 @@ ec_GFp_sub_3(const mp_int *a, const mp_int *b, mp_int *r,
 	}
 
 #ifndef MPI_AMD64_ADD
-	MP_SUB_BORROW(r0, b0, r0, 0,     borrow);
-	MP_SUB_BORROW(r1, b1, r1, borrow, borrow);
-	MP_SUB_BORROW(r2, b2, r2, borrow, borrow);
+        borrow = 0;
+	MP_SUB_BORROW(r0, b0, r0, borrow);
+	MP_SUB_BORROW(r1, b1, r1, borrow);
+	MP_SUB_BORROW(r2, b2, r2, borrow);
 #else
 	__asm__ (
                 "xorq   %3,%3           \n\t"
@@ -645,9 +619,10 @@ ec_GFp_sub_3(const mp_int *a, const mp_int *b, mp_int *r,
 		b1 = MP_DIGIT(&meth->irr,1);
 		b0 = MP_DIGIT(&meth->irr,0);
 #ifndef MPI_AMD64_ADD
-		MP_ADD_CARRY(b0, r0, r0, 0,      borrow);
-		MP_ADD_CARRY(b1, r1, r1, borrow, borrow);
-		MP_ADD_CARRY(b2, r2, r2, borrow, borrow);
+                borrow = 0;
+		MP_ADD_CARRY(b0, r0, r0, borrow);
+		MP_ADD_CARRY(b1, r1, r1, borrow);
+		MP_ADD_CARRY(b2, r2, r2, borrow);
 #else
 		__asm__ (
 			"addq   %3,%0           \n\t"
@@ -710,10 +685,11 @@ ec_GFp_sub_4(const mp_int *a, const mp_int *b, mp_int *r,
 	}
 
 #ifndef MPI_AMD64_ADD
-	MP_SUB_BORROW(r0, b0, r0, 0,     borrow);
-	MP_SUB_BORROW(r1, b1, r1, borrow, borrow);
-	MP_SUB_BORROW(r2, b2, r2, borrow, borrow);
-	MP_SUB_BORROW(r3, b3, r3, borrow, borrow);
+        borrow = 0;
+	MP_SUB_BORROW(r0, b0, r0, borrow);
+	MP_SUB_BORROW(r1, b1, r1, borrow);
+	MP_SUB_BORROW(r2, b2, r2, borrow);
+	MP_SUB_BORROW(r3, b3, r3, borrow);
 #else
 	__asm__ (
                 "xorq   %4,%4           \n\t"
@@ -736,10 +712,11 @@ ec_GFp_sub_4(const mp_int *a, const mp_int *b, mp_int *r,
 		b1 = MP_DIGIT(&meth->irr,1);
 		b0 = MP_DIGIT(&meth->irr,0);
 #ifndef MPI_AMD64_ADD
-		MP_ADD_CARRY(b0, r0, r0, 0,      borrow);
-		MP_ADD_CARRY(b1, r1, r1, borrow, borrow);
-		MP_ADD_CARRY(b2, r2, r2, borrow, borrow);
-		MP_ADD_CARRY(b3, r3, r3, borrow, borrow);
+                borrow = 0;
+		MP_ADD_CARRY(b0, r0, r0, borrow);
+		MP_ADD_CARRY(b1, r1, r1, borrow);
+		MP_ADD_CARRY(b2, r2, r2, borrow);
+		MP_ADD_CARRY(b3, r3, r3, borrow);
 #else
 		__asm__ (
 			"addq   %4,%0           \n\t"
@@ -806,11 +783,12 @@ ec_GFp_sub_5(const mp_int *a, const mp_int *b, mp_int *r,
 		b0 = MP_DIGIT(b,0);
 	}
 
-	MP_SUB_BORROW(r0, b0, r0, 0,     borrow);
-	MP_SUB_BORROW(r1, b1, r1, borrow, borrow);
-	MP_SUB_BORROW(r2, b2, r2, borrow, borrow);
-	MP_SUB_BORROW(r3, b3, r3, borrow, borrow);
-	MP_SUB_BORROW(r4, b4, r4, borrow, borrow);
+        borrow = 0;
+	MP_SUB_BORROW(r0, b0, r0, borrow);
+	MP_SUB_BORROW(r1, b1, r1, borrow);
+	MP_SUB_BORROW(r2, b2, r2, borrow);
+	MP_SUB_BORROW(r3, b3, r3, borrow);
+	MP_SUB_BORROW(r4, b4, r4, borrow);
 
 	/* Do quick 'add' if we've gone under 0
 	 * (subtract the 2's complement of the curve field) */
@@ -820,10 +798,11 @@ ec_GFp_sub_5(const mp_int *a, const mp_int *b, mp_int *r,
 	 	b2 = MP_DIGIT(&meth->irr,2);
 		b1 = MP_DIGIT(&meth->irr,1);
 		b0 = MP_DIGIT(&meth->irr,0);
-		MP_ADD_CARRY(b0, r0, r0, 0,      borrow);
-		MP_ADD_CARRY(b1, r1, r1, borrow, borrow);
-		MP_ADD_CARRY(b2, r2, r2, borrow, borrow);
-		MP_ADD_CARRY(b3, r3, r3, borrow, borrow);
+                borrow = 0;
+		MP_ADD_CARRY(b0, r0, r0, borrow);
+		MP_ADD_CARRY(b1, r1, r1, borrow);
+		MP_ADD_CARRY(b2, r2, r2, borrow);
+		MP_ADD_CARRY(b3, r3, r3, borrow);
 	}
 	MP_CHECKOK(s_mp_pad(r, 5));
 	MP_DIGIT(r, 4) = r4;
@@ -878,12 +857,13 @@ ec_GFp_sub_6(const mp_int *a, const mp_int *b, mp_int *r,
 		b0 = MP_DIGIT(b,0);
 	}
 
-	MP_SUB_BORROW(r0, b0, r0, 0,     borrow);
-	MP_SUB_BORROW(r1, b1, r1, borrow, borrow);
-	MP_SUB_BORROW(r2, b2, r2, borrow, borrow);
-	MP_SUB_BORROW(r3, b3, r3, borrow, borrow);
-	MP_SUB_BORROW(r4, b4, r4, borrow, borrow);
-	MP_SUB_BORROW(r5, b5, r5, borrow, borrow);
+        borrow = 0;
+	MP_SUB_BORROW(r0, b0, r0, borrow);
+	MP_SUB_BORROW(r1, b1, r1, borrow);
+	MP_SUB_BORROW(r2, b2, r2, borrow);
+	MP_SUB_BORROW(r3, b3, r3, borrow);
+	MP_SUB_BORROW(r4, b4, r4, borrow);
+	MP_SUB_BORROW(r5, b5, r5, borrow);
 
 	/* Do quick 'add' if we've gone under 0
 	 * (subtract the 2's complement of the curve field) */
@@ -894,11 +874,12 @@ ec_GFp_sub_6(const mp_int *a, const mp_int *b, mp_int *r,
 	 	b2 = MP_DIGIT(&meth->irr,2);
 		b1 = MP_DIGIT(&meth->irr,1);
 		b0 = MP_DIGIT(&meth->irr,0);
-		MP_ADD_CARRY(b0, r0, r0, 0,      borrow);
-		MP_ADD_CARRY(b1, r1, r1, borrow, borrow);
-		MP_ADD_CARRY(b2, r2, r2, borrow, borrow);
-		MP_ADD_CARRY(b3, r3, r3, borrow, borrow);
-		MP_ADD_CARRY(b4, r4, r4, borrow, borrow);
+                borrow = 0;
+		MP_ADD_CARRY(b0, r0, r0, borrow);
+		MP_ADD_CARRY(b1, r1, r1, borrow);
+		MP_ADD_CARRY(b2, r2, r2, borrow);
+		MP_ADD_CARRY(b3, r3, r3, borrow);
+		MP_ADD_CARRY(b4, r4, r4, borrow);
 	}
 
 	MP_CHECKOK(s_mp_pad(r, 6));

@@ -1,43 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Netscape security libraries.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1994-2000
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   John Gardiner Myers <jgmyers@speakeasy.net>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
-
-#ifdef DEBUG
-static const char CVS_ID[] = "@(#) $RCSfile: utf8.c,v $ $Revision: 1.13 $ $Date: 2008/10/05 20:59:26 $";
-#endif /* DEBUG */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "seccomon.h"
 #include "secport.h"
@@ -356,10 +319,10 @@ sec_port_ucs2_utf8_conversion_function
     }
 
     for( i = 0; i < inBufLen; i += 2 ) {
-      if( (inBuf[i+H_0] == 0x00) && ((inBuf[i+H_0] & 0x80) == 0x00) ) len += 1;
+      if( (inBuf[i+H_0] == 0x00) && ((inBuf[i+H_1] & 0x80) == 0x00) ) len += 1;
       else if( inBuf[i+H_0] < 0x08 ) len += 2;
-      else if( ((inBuf[i+0+H_0] & 0xDC) == 0xD8) ) {
-        if( ((inBuf[i+2+H_0] & 0xDC) == 0xDC) && ((inBufLen - i) > 2) ) {
+      else if( ((inBuf[i+0+H_0] & 0xFC) == 0xD8) ) {
+        if( ((inBufLen - i) > 2) && ((inBuf[i+2+H_0] & 0xFC) == 0xDC) ) {
           i += 2;
           len += 4;
         } else {
@@ -393,10 +356,10 @@ sec_port_ucs2_utf8_conversion_function
         outBuf[len+1] = 0x80 | ((inBuf[i+H_1] & 0x3F) >> 0);
 
         len += 2;
-      } else if( (inBuf[i+H_0] & 0xDC) == 0xD8 ) {
+      } else if( (inBuf[i+H_0] & 0xFC) == 0xD8 ) {
         int abcde, BCDE;
 
-        PORT_Assert(((inBuf[i+2+H_0] & 0xDC) == 0xDC) && ((inBufLen - i) > 2));
+        PORT_Assert(((inBufLen - i) > 2) && ((inBuf[i+2+H_0] & 0xFC) == 0xDC) );
 
         /* D800-DBFF DC00-DFFF -> 11110xxx 10xxxxxx 10xxxxxx 10xxxxxx */
         /* 110110BC DEfghijk 110111lm nopqrstu ->
@@ -889,6 +852,7 @@ struct ucs2 ucs2[] = {
   { 0x9000, "\xE9\x80\x80" },
   { 0xA000, "\xEA\x80\x80" },
   { 0xC000, "\xEC\x80\x80" },
+  { 0xFB01, "\xEF\xAC\x81" },
   { 0xFFFF, "\xEF\xBF\xBF" }
 
 };
@@ -1190,6 +1154,18 @@ char *utf8_bad[] = {
   "\xED\xA0\x80\xE0\xBF\xBF",
 };
 
+/* illegal UTF-16 sequences, 0-terminated */
+uint16_t utf16_bad[][3] = {
+  /* leading surrogate not followed by trailing surrogate */
+  { 0xD800, 0, 0 },
+  { 0xD800, 0x41, 0 },
+  { 0xD800, 0xfe, 0 },
+  { 0xD800, 0x3bb, 0 },
+  { 0xD800, 0xD800, 0 },
+  { 0xD800, 0xFEFF, 0 },
+  { 0xD800, 0xFFFD, 0 },
+};
+
 static void
 dump_utf8
 (
@@ -1257,6 +1233,18 @@ test_ucs4_chars
       rv = PR_FALSE;
       continue;
     }
+
+    len = strlen(e->utf8) - 1;
+    result = sec_port_ucs4_utf8_conversion_function(PR_FALSE,
+      (unsigned char *)&e->c, sizeof(e->c), utf8 + sizeof(utf8) - len, len,
+      &len);
+
+    if( result || len != strlen(e->utf8) ) {
+      fprintf(stdout, "Length computation error converting UCS-4 0x%08.8x"
+        " to UTF-8\n", e->c);
+      rv = PR_FALSE;
+      continue;
+    }
   }
 
   return rv;
@@ -1311,6 +1299,18 @@ test_ucs2_chars
     if( (sizeof(back) != len) || (e->c != back) ) {
       dump_utf8("Wrong conversion of UTF-8", utf8, "to UCS-2:");
       fprintf(stdout, "expected 0x%08.8x, received 0x%08.8x\n", e->c, back);
+      rv = PR_FALSE;
+      continue;
+    }
+
+    len = strlen(e->utf8) - 1;
+    result = sec_port_ucs2_utf8_conversion_function(PR_FALSE,
+      (unsigned char *)&e->c, sizeof(e->c), utf8 + sizeof(utf8) - len, len,
+      &len);
+
+    if( result || len != strlen(e->utf8) ) {
+      fprintf(stdout, "Length computation error converting UCS-2 0x%04.4x"
+        " to UTF-8\n", e->c);
       rv = PR_FALSE;
       continue;
     }
@@ -1464,6 +1464,38 @@ test_utf8_bad_chars
 }
 
 static PRBool
+test_utf16_bad_chars(void)
+{
+  PRBool rv = PR_TRUE;
+  int i;
+
+  for( i = 0; i < sizeof(utf16_bad)/sizeof(utf16_bad[0]); ++i ) {
+    PRBool result;
+    unsigned char destbuf[18];
+    unsigned int j, len, destlen;
+    uint16_t *buf;
+
+    for( len = 0; utf16_bad[i][len] != 0; ++len )
+      /* nothing */;
+
+    buf = malloc(sizeof(uint16_t) * len);
+    for( j = 0; j < len; ++j )
+      buf[j] = htons(utf16_bad[i][j]);
+
+    result = sec_port_ucs2_utf8_conversion_function(PR_FALSE,
+        (unsigned char *)buf, sizeof(uint16_t) * len, destbuf, sizeof(destbuf),
+        &destlen);
+    if( result ) {
+      fprintf(stdout, "Failed to detect bad UTF-16 string conversion for "
+          "{0x%x,0x%x} (UTF-8 len = %u)\n", utf16_bad[i][0], utf16_bad[i][1],
+          destlen);
+      rv = PR_FALSE;
+    }
+    free(buf);
+  }
+}
+
+static PRBool
 test_iso88591_chars
 (
   void
@@ -1613,7 +1645,7 @@ test_multichars
     exit(1);
   }
 
-  len = 0;
+  len = 1;
   for( i = 0; i < sizeof(ucs4)/sizeof(ucs4[0]); i++ ) {
     ucs4s[i] = ucs4[i].c;
     len += strlen(ucs4[i].utf8);
@@ -1621,7 +1653,7 @@ test_multichars
 
   ucs4_utf8 = (char *)malloc(len);
 
-  len = 0;
+  len = 1;
   for( i = 0; i < sizeof(ucs2)/sizeof(ucs2[0]); i++ ) {
     ucs2s[i] = ucs2[i].c;
     len += strlen(ucs2[i].utf8);
@@ -1818,6 +1850,7 @@ main
       test_ucs2_chars() &&
       test_utf16_chars() &&
       test_utf8_bad_chars() &&
+      test_utf16_bad_chars() &&
       test_iso88591_chars() &&
       test_zeroes() &&
       test_multichars() &&

@@ -1,42 +1,10 @@
 /* -*- Mode: C; tab-width: 8 -*-*/
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Netscape security libraries.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1994-2000
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
- * This file will contain all routines dealing with creating a 
+ * This file will contain all routines dealing with creating a
  * CMMFCertRepContent structure through Create/Set functions.
  */
 
@@ -47,11 +15,11 @@
 #include "secitem.h"
 #include "secder.h"
 
-CMMFCertRepContent*
+CMMFCertRepContent *
 CMMF_CreateCertRepContent(void)
 {
     CMMFCertRepContent *retCertRep;
-    PRArenaPool        *poolp;
+    PLArenaPool *poolp;
 
     poolp = PORT_NewArena(CRMF_DEFAULT_ARENA_SIZE);
     if (poolp == NULL) {
@@ -63,47 +31,47 @@ CMMF_CreateCertRepContent(void)
     }
     retCertRep->poolp = poolp;
     return retCertRep;
- loser:
+loser:
     if (poolp != NULL) {
         PORT_FreeArena(poolp, PR_FALSE);
     }
     return NULL;
 }
 
-SECStatus 
+SECStatus
 cmmf_CertOrEncCertSetCertificate(CMMFCertOrEncCert *certOrEncCert,
-				 PRArenaPool       *poolp,
-				 CERTCertificate   *inCert)
+                                 PLArenaPool *poolp,
+                                 CERTCertificate *inCert)
 {
-    SECItem               *derDest = NULL;
-    SECStatus             rv = SECFailure;
+    SECItem *derDest = NULL;
+    SECStatus rv = SECFailure;
 
     if (inCert->derCert.data == NULL) {
-        derDest = SEC_ASN1EncodeItem(NULL, NULL, inCert, 
-				     CMMFCertOrEncCertCertificateTemplate);
-	if (derDest == NULL) {
-	    goto loser;
-	}
+        derDest = SEC_ASN1EncodeItem(NULL, NULL, inCert,
+                                     CMMFCertOrEncCertCertificateTemplate);
+        if (derDest == NULL) {
+            goto loser;
+        }
     } else {
         derDest = SECITEM_DupItem(&inCert->derCert);
-	if (derDest == NULL) {
-	    goto loser;
-	}
+        if (derDest == NULL) {
+            goto loser;
+        }
     }
     PORT_Assert(certOrEncCert->cert.certificate == NULL);
     certOrEncCert->cert.certificate = CERT_DupCertificate(inCert);
     certOrEncCert->choice = cmmfCertificate;
     if (poolp != NULL) {
         rv = SECITEM_CopyItem(poolp, &certOrEncCert->derValue, derDest);
-	if (rv != SECSuccess) {
-	    goto loser;
-	}
+        if (rv != SECSuccess) {
+            goto loser;
+        }
     } else {
         certOrEncCert->derValue = *derDest;
     }
     PORT_Free(derDest);
     return SECSuccess;
- loser:
+loser:
     if (derDest != NULL) {
         SECITEM_FreeItem(derDest, PR_TRUE);
     }
@@ -111,41 +79,41 @@ cmmf_CertOrEncCertSetCertificate(CMMFCertOrEncCert *certOrEncCert,
 }
 
 SECStatus
-cmmf_ExtractCertsFromList(CERTCertList      *inCertList,
-			  PRArenaPool       *poolp,
-			  CERTCertificate ***certArray)
+cmmf_ExtractCertsFromList(CERTCertList *inCertList,
+                          PLArenaPool *poolp,
+                          CERTCertificate ***certArray)
 {
-    CERTCertificate  **arrayLocalCopy;
-    CERTCertListNode  *node;
-    int                numNodes = 0, i;
+    CERTCertificate **arrayLocalCopy;
+    CERTCertListNode *node;
+    int numNodes = 0, i;
 
     for (node = CERT_LIST_HEAD(inCertList); !CERT_LIST_END(node, inCertList);
-	 node = CERT_LIST_NEXT(node)) {
+         node = CERT_LIST_NEXT(node)) {
         numNodes++;
     }
 
     arrayLocalCopy = *certArray = (poolp == NULL) ?
-                    PORT_NewArray(CERTCertificate*, (numNodes+1)) :
-                    PORT_ArenaNewArray(poolp, CERTCertificate*, (numNodes+1));
+                                    PORT_NewArray(CERTCertificate *, (numNodes + 1)) :
+                                    PORT_ArenaNewArray(poolp, CERTCertificate *, (numNodes + 1));
     if (arrayLocalCopy == NULL) {
         return SECFailure;
     }
-    for (node = CERT_LIST_HEAD(inCertList), i=0; 
-	 !CERT_LIST_END(node, inCertList);
-	 node = CERT_LIST_NEXT(node), i++) {
+    for (node = CERT_LIST_HEAD(inCertList), i = 0;
+         !CERT_LIST_END(node, inCertList);
+         node = CERT_LIST_NEXT(node), i++) {
         arrayLocalCopy[i] = CERT_DupCertificate(node->cert);
-	if (arrayLocalCopy[i] == NULL) {
-	    int j;
-	    
-	    for (j=0; j<i; j++) {
-	        CERT_DestroyCertificate(arrayLocalCopy[j]);
-	    }
-	    if (poolp == NULL) {
-	        PORT_Free(arrayLocalCopy);
-	    }
-	    *certArray = NULL;
-	    return SECFailure;
-	}
+        if (arrayLocalCopy[i] == NULL) {
+            int j;
+
+            for (j = 0; j < i; j++) {
+                CERT_DestroyCertificate(arrayLocalCopy[j]);
+            }
+            if (poolp == NULL) {
+                PORT_Free(arrayLocalCopy);
+            }
+            *certArray = NULL;
+            return SECFailure;
+        }
     }
     arrayLocalCopy[numNodes] = NULL;
     return SECSuccess;
@@ -153,56 +121,56 @@ cmmf_ExtractCertsFromList(CERTCertList      *inCertList,
 
 SECStatus
 CMMF_CertRepContentSetCertResponses(CMMFCertRepContent *inCertRepContent,
-				    CMMFCertResponse  **inCertResponses,
-				    int                 inNumResponses)
+                                    CMMFCertResponse **inCertResponses,
+                                    int inNumResponses)
 {
-    PRArenaPool       *poolp;
+    PLArenaPool *poolp;
     CMMFCertResponse **respArr, *newResp;
-    void              *mark;
-    SECStatus          rv;
-    int                i;
+    void *mark;
+    SECStatus rv;
+    int i;
 
-    PORT_Assert (inCertRepContent != NULL &&
-		 inCertResponses  != NULL &&
-		 inNumResponses    > 0);
+    PORT_Assert(inCertRepContent != NULL &&
+                inCertResponses != NULL &&
+                inNumResponses > 0);
     if (inCertRepContent == NULL ||
-	inCertResponses  == NULL ||
-	inCertRepContent->response != NULL) {
+        inCertResponses == NULL ||
+        inCertRepContent->response != NULL) {
         return SECFailure;
     }
     poolp = inCertRepContent->poolp;
     mark = PORT_ArenaMark(poolp);
-    respArr = inCertRepContent->response = 
-        PORT_ArenaZNewArray(poolp, CMMFCertResponse*, (inNumResponses+1));
+    respArr = inCertRepContent->response =
+        PORT_ArenaZNewArray(poolp, CMMFCertResponse *, (inNumResponses + 1));
     if (respArr == NULL) {
         goto loser;
     }
-    for (i=0; i<inNumResponses; i++) {
+    for (i = 0; i < inNumResponses; i++) {
         newResp = PORT_ArenaZNew(poolp, CMMFCertResponse);
-	if (newResp == NULL) {
-	    goto loser;
-	}
+        if (newResp == NULL) {
+            goto loser;
+        }
         rv = cmmf_CopyCertResponse(poolp, newResp, inCertResponses[i]);
-	if (rv != SECSuccess) {
-	    goto loser;
-	}
-	respArr[i] = newResp;
+        if (rv != SECSuccess) {
+            goto loser;
+        }
+        respArr[i] = newResp;
     }
     respArr[inNumResponses] = NULL;
     PORT_ArenaUnmark(poolp, mark);
     return SECSuccess;
 
- loser:
+loser:
     PORT_ArenaRelease(poolp, mark);
     return SECFailure;
 }
 
-CMMFCertResponse*
+CMMFCertResponse *
 CMMF_CreateCertResponse(long inCertReqId)
 {
-    SECItem          *dummy;
+    SECItem *dummy;
     CMMFCertResponse *newResp;
-    
+
     newResp = PORT_ZNew(CMMFCertResponse);
     if (newResp == NULL) {
         goto loser;
@@ -213,7 +181,7 @@ CMMF_CreateCertResponse(long inCertReqId)
     }
     return newResp;
 
- loser:
+loser:
     if (newResp != NULL) {
         CMMF_DestroyCertResponse(newResp);
     }
@@ -222,32 +190,32 @@ CMMF_CreateCertResponse(long inCertReqId)
 
 SECStatus
 CMMF_CertResponseSetPKIStatusInfoStatus(CMMFCertResponse *inCertResp,
-					CMMFPKIStatus     inPKIStatus)
+                                        CMMFPKIStatus inPKIStatus)
 {
-    PORT_Assert (inCertResp != NULL && inPKIStatus >= cmmfGranted
-		 && inPKIStatus < cmmfNumPKIStatus);
+    PORT_Assert(inCertResp != NULL && inPKIStatus >= cmmfGranted &&
+                inPKIStatus < cmmfNumPKIStatus);
 
-    if  (inCertResp == NULL) {
+    if (inCertResp == NULL) {
         return SECFailure;
     }
     return cmmf_PKIStatusInfoSetStatus(&inCertResp->status, NULL,
-				       inPKIStatus);
+                                       inPKIStatus);
 }
 
 SECStatus
-CMMF_CertResponseSetCertificate (CMMFCertResponse *inCertResp,
-				 CERTCertificate  *inCertificate)
+CMMF_CertResponseSetCertificate(CMMFCertResponse *inCertResp,
+                                CERTCertificate *inCertificate)
 {
     CMMFCertifiedKeyPair *keyPair = NULL;
-    SECStatus             rv = SECFailure;
+    SECStatus rv = SECFailure;
 
     PORT_Assert(inCertResp != NULL && inCertificate != NULL);
     if (inCertResp == NULL || inCertificate == NULL) {
         return SECFailure;
     }
     if (inCertResp->certifiedKeyPair == NULL) {
-        keyPair = inCertResp->certifiedKeyPair = 
-	    PORT_ZNew(CMMFCertifiedKeyPair);
+        keyPair = inCertResp->certifiedKeyPair =
+            PORT_ZNew(CMMFCertifiedKeyPair);
     } else {
         keyPair = inCertResp->certifiedKeyPair;
     }
@@ -255,36 +223,35 @@ CMMF_CertResponseSetCertificate (CMMFCertResponse *inCertResp,
         goto loser;
     }
     rv = cmmf_CertOrEncCertSetCertificate(&keyPair->certOrEncCert, NULL,
-					  inCertificate);
+                                          inCertificate);
     if (rv != SECSuccess) {
         goto loser;
     }
     return SECSuccess;
- loser:
+loser:
     if (keyPair) {
         if (keyPair->certOrEncCert.derValue.data) {
-	    PORT_Free(keyPair->certOrEncCert.derValue.data);
-	}
-	PORT_Free(keyPair);
+            PORT_Free(keyPair->certOrEncCert.derValue.data);
+        }
+        PORT_Free(keyPair);
     }
     return rv;
 }
 
-
 SECStatus
 CMMF_CertRepContentSetCAPubs(CMMFCertRepContent *inCertRepContent,
-			     CERTCertList       *inCAPubs)
+                             CERTCertList *inCAPubs)
 {
-    PRArenaPool      *poolp;
-    void             *mark;
-    SECStatus         rv;
+    PLArenaPool *poolp;
+    void *mark;
+    SECStatus rv;
 
     PORT_Assert(inCertRepContent != NULL &&
-		inCAPubs         != NULL &&
-		inCertRepContent->caPubs == NULL);
-    
+                inCAPubs != NULL &&
+                inCertRepContent->caPubs == NULL);
+
     if (inCertRepContent == NULL ||
-	inCAPubs == NULL || inCertRepContent == NULL) {
+        inCAPubs == NULL || inCertRepContent == NULL) {
         return SECFailure;
     }
 
@@ -292,7 +259,7 @@ CMMF_CertRepContentSetCAPubs(CMMFCertRepContent *inCertRepContent,
     mark = PORT_ArenaMark(poolp);
 
     rv = cmmf_ExtractCertsFromList(inCAPubs, poolp,
-				   &inCertRepContent->caPubs);
+                                   &inCertRepContent->caPubs);
 
     if (rv != SECSuccess) {
         PORT_ArenaRelease(poolp, mark);
@@ -302,14 +269,14 @@ CMMF_CertRepContentSetCAPubs(CMMFCertRepContent *inCertRepContent,
     return rv;
 }
 
-CERTCertificate*
+CERTCertificate *
 CMMF_CertifiedKeyPairGetCertificate(CMMFCertifiedKeyPair *inCertKeyPair,
-				    CERTCertDBHandle     *inCertdb)
+                                    CERTCertDBHandle *inCertdb)
 {
     PORT_Assert(inCertKeyPair != NULL);
     if (inCertKeyPair == NULL) {
         return NULL;
     }
     return cmmf_CertOrEncCertGetCertificate(&inCertKeyPair->certOrEncCert,
-					    inCertdb);
+                                            inCertdb);
 }

@@ -1,41 +1,8 @@
 #! /bin/bash
 #
-# ***** BEGIN LICENSE BLOCK *****
-# Version: MPL 1.1/GPL 2.0/LGPL 2.1
-#
-# The contents of this file are subject to the Mozilla Public License Version
-# 1.1 (the "License"); you may not use this file except in compliance with
-# the License. You may obtain a copy of the License at
-# http://www.mozilla.org/MPL/
-#
-# Software distributed under the License is distributed on an "AS IS" basis,
-# WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
-# for the specific language governing rights and limitations under the
-# License.
-#
-# The Original Code is the Netscape security libraries.
-#
-# The Initial Developer of the Original Code is
-# Netscape Communications Corporation.
-# Portions created by the Initial Developer are Copyright (C) 1994-2009
-# the Initial Developer. All Rights Reserved.
-#
-# Contributor(s):
-#   Slavomir Katuscak <slavomir.katuscak@sun.com>, Sun Microsystems
-#
-# Alternatively, the contents of this file may be used under the terms of
-# either the GNU General Public License Version 2 or later (the "GPL"), or
-# the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
-# in which case the provisions of the GPL or the LGPL are applicable instead
-# of those above. If you wish to allow use of your version of this file only
-# under the terms of either the GPL or the LGPL, and not to allow others to
-# use your version of this file under the terms of the MPL, indicate your
-# decision by deleting the provisions above and replace them with the notice
-# and other provisions required by the GPL or the LGPL. If you do not delete
-# the provisions above, a recipient may use your version of this file under
-# the terms of any one of the MPL, the GPL or the LGPL.
-#
-# ***** END LICENSE BLOCK *****
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 ########################################################################
 #
@@ -47,7 +14,7 @@
 # variables, utilities and shellfunctions global to NSS QA
 # needs to work on all Unix and Windows platforms
 #
-# included from 
+# included from
 # -------------
 #   all.sh
 #   ssl.sh
@@ -95,6 +62,7 @@ if [ -z "${INIT_SOURCED}" -o "${INIT_SOURCED}" != "TRUE" ]; then
         FIPSDIR=${HOSTDIR}/fips
         DBPASSDIR=${HOSTDIR}/dbpass
         ECCURVES_DIR=${HOSTDIR}/eccurves
+        DISTRUSTDIR=${HOSTDIR}/distrust
 
         SERVER_CADIR=${HOSTDIR}/serverCA
         CLIENT_CADIR=${HOSTDIR}/clientCA
@@ -107,6 +75,10 @@ if [ -z "${INIT_SOURCED}" -o "${INIT_SOURCED}" != "TRUE" ]; then
         IOPR_OCSP_CLIENTDIR=${HOSTDIR}/client_ocsp_iopr
 
         CERT_EXTENSIONS_DIR=${HOSTDIR}/cert_extensions
+        STAPLINGDIR=${HOSTDIR}/stapling
+        SSLGTESTDIR=${HOSTDIR}/ssl_gtests
+        PK11GTESTDIR=${HOSTDIR}/pk11_gtests
+        DERGTESTDIR=${HOSTDIR}/der_gtests
 
         PWFILE=${HOSTDIR}/tests.pw
         NOISE_FILE=${HOSTDIR}/tests_noise
@@ -124,7 +96,7 @@ if [ -z "${INIT_SOURCED}" -o "${INIT_SOURCED}" != "TRUE" ]; then
 
         P_SERVER_CADIR=${SERVER_CADIR}
         P_CLIENT_CADIR=${CLIENT_CADIR}
-    
+
         if [ -n "${MULTIACCESS_DBM}" ]; then
             P_SERVER_CADIR="multiaccess:${D_SERVER_CA}"
             P_CLIENT_CADIR="multiaccess:${D_CLIENT_CA}"
@@ -143,8 +115,8 @@ if [ -z "${INIT_SOURCED}" -o "${INIT_SOURCED}" != "TRUE" ]; then
 # Generate noise file
     noise()
     {
-        # NOTE: these keys are only suitable for testing, as this whole thing 
-        # bypasses the entropy gathering. Don't use this method to generate 
+        # NOTE: these keys are only suitable for testing, as this whole thing
+        # bypasses the entropy gathering. Don't use this method to generate
         # keys and certs for product use or deployment.
         ps -efl > ${NOISE_FILE} 2>&1
         ps aux >> ${NOISE_FILE} 2>&1
@@ -249,14 +221,14 @@ if [ -z "${INIT_SOURCED}" -o "${INIT_SOURCED}" != "TRUE" ]; then
     }
     html_head()
     {
-	
+
         html "<TABLE BORDER=1 ${TABLE_ARGS}><TR><TH COLSPAN=3>$*</TH></TR>"
-        html "<TR><TH width=500>Test Case</TH><TH width=50>Result</TH></TR>" 
+        html "<TR><TH width=500>Test Case</TH><TH width=50>Result</TH></TR>"
         echo "$SCRIPTNAME: $* ==============================="
     }
     html_msg()
     {
-        if [ "$1" -ne "$2" ] ; then
+        if [ $1 -ne $2 ] ; then
             html_failed "$3" "$4"
         else
             html_passed "$3" "$4"
@@ -265,14 +237,14 @@ if [ -z "${INIT_SOURCED}" -o "${INIT_SOURCED}" != "TRUE" ]; then
     HTML_FAILED='</TD><TD bgcolor=red>Failed</TD><TR>'
     HTML_FAILED_CORE='</TD><TD bgcolor=red>Failed Core</TD><TR>'
     HTML_PASSED='</TD><TD bgcolor=lightGreen>Passed</TD><TR>'
-    HTML_UNKNOWN='</TD><TD>Unknown/TD><TR>'
+    HTML_UNKNOWN='</TD><TD>Unknown</TD><TR>'
     TABLE_ARGS=
 
 
 #directory name init
     SCRIPTNAME=init.sh
 
-    mozilla_root=`(cd ../../../..; pwd)`
+    mozilla_root=`(cd ../../..; pwd)`
     MOZILLA_ROOT=${MOZILLA_ROOT-$mozilla_root}
 
     qadir=`(cd ..; pwd)`
@@ -282,18 +254,34 @@ if [ -z "${INIT_SOURCED}" -o "${INIT_SOURCED}" != "TRUE" ]; then
     COMMON=${TEST_COMMON-$common}
     export COMMON
 
-    MAKE=gmake
-    $MAKE -v >/dev/null 2>&1 || MAKE=make
-    $MAKE -v >/dev/null 2>&1 || { echo "You are missing make."; exit 5; }
-    MAKE="$MAKE --no-print-directory"
-
     DIST=${DIST-${MOZILLA_ROOT}/dist}
-    SECURITY_ROOT=${SECURITY_ROOT-${MOZILLA_ROOT}/security/nss}
     TESTDIR=${TESTDIR-${MOZILLA_ROOT}/tests_results/security}
-    OBJDIR=`(cd $COMMON; $MAKE objdir_name)`
-    OS_ARCH=`(cd $COMMON; $MAKE os_arch)`
-    DLL_PREFIX=`(cd $COMMON; $MAKE dll_prefix)`
-    DLL_SUFFIX=`(cd $COMMON; $MAKE dll_suffix)`
+
+    # Allow for override options from a config file
+    if [ -n "${OBJDIR}" -a -f ${DIST}/${OBJDIR}/platform.cfg ]; then
+        . ${DIST}/${OBJDIR}/platform.cfg
+    fi
+
+    # only need make if we don't already have certain variables set
+    if [ -z "${OBJDIR}" -o -z "${OS_ARCH}" -o -z "${DLL_PREFIX}" -o -z "${DLL_SUFFIX}" ]; then
+        MAKE=gmake
+        $MAKE -v >/dev/null 2>&1 || MAKE=make
+        $MAKE -v >/dev/null 2>&1 || { echo "You are missing make."; exit 5; }
+        MAKE="$MAKE --no-print-directory"
+    fi
+
+    if [ "${OBJDIR}" = "" ]; then
+        OBJDIR=`(cd $COMMON; $MAKE objdir_name)`
+    fi
+    if [ "${OS_ARCH}" = "" ]; then
+        OS_ARCH=`(cd $COMMON; $MAKE os_arch)`
+    fi
+    if [ "${DLL_PREFIX}" = "" ]; then
+        DLL_PREFIX=`(cd $COMMON; $MAKE dll_prefix)`
+    fi
+    if [ "${DLL_SUFFIX}" = "" ]; then
+        DLL_SUFFIX=`(cd $COMMON; $MAKE dll_suffix)`
+    fi
     OS_NAME=`uname -s | sed -e "s/-[0-9]*\.[0-9]*//" | sed -e "s/-WOW64//"`
 
     BINDIR="${DIST}/${OBJDIR}/bin"
@@ -309,16 +297,16 @@ if [ -z "${INIT_SOURCED}" -o "${INIT_SOURCED}" != "TRUE" ]; then
 
     # Same problem with MSYS/Mingw, except we need to start over with pwd -W
     if [ "${OS_ARCH}" = "WINNT" -a "$OS_NAME" = "MINGW32_NT" ]; then
-		mingw_mozilla_root=`(cd ../../../..; pwd -W)`
-		MINGW_MOZILLA_ROOT=${MINGW_MOZILLA_ROOT-$mingw_mozilla_root}
-		TESTDIR=${MINGW_TESTDIR-${MINGW_MOZILLA_ROOT}/tests_results/security}
+                mingw_mozilla_root=`(cd ../../..; pwd -W)`
+                MINGW_MOZILLA_ROOT=${MINGW_MOZILLA_ROOT-$mingw_mozilla_root}
+                TESTDIR=${MINGW_TESTDIR-${MINGW_MOZILLA_ROOT}/tests_results/security}
     fi
 
     # Same problem with MSYS/Mingw, except we need to start over with pwd -W
     if [ "${OS_ARCH}" = "WINNT" -a "$OS_NAME" = "MINGW32_NT" ]; then
-		mingw_mozilla_root=`(cd ../../../..; pwd -W)`
-		MINGW_MOZILLA_ROOT=${MINGW_MOZILLA_ROOT-$mingw_mozilla_root}
-		TESTDIR=${MINGW_TESTDIR-${MINGW_MOZILLA_ROOT}/tests_results/security}
+                mingw_mozilla_root=`(cd ../../..; pwd -W)`
+                MINGW_MOZILLA_ROOT=${MINGW_MOZILLA_ROOT-$mingw_mozilla_root}
+                TESTDIR=${MINGW_TESTDIR-${MINGW_MOZILLA_ROOT}/tests_results/security}
     fi
     echo testdir is $TESTDIR
 
@@ -328,9 +316,12 @@ if [ -z "${INIT_SOURCED}" -o "${INIT_SOURCED}" != "TRUE" ]; then
         if [ "${OS_ARCH}" = "WINNT" -a "$OS_NAME"  != "CYGWIN_NT" -a "$OS_NAME" != "MINGW32_NT" ]; then
             PATH=.\;${DIST}/${OBJDIR}/bin\;${DIST}/${OBJDIR}/lib\;$PATH
             PATH=`perl ../path_uniq -d ';' "$PATH"`
+        elif [ "${OS_ARCH}" = "Android" ]; then
+            # android doesn't have perl, skip the uniq step
+            PATH=.:${DIST}/${OBJDIR}/bin:${DIST}/${OBJDIR}/lib:$PATH
         else
             PATH=.:${DIST}/${OBJDIR}/bin:${DIST}/${OBJDIR}/lib:/bin:/usr/bin:$PATH
-            # added /bin and /usr/bin in the beginning so a local perl will 
+            # added /bin and /usr/bin in the beginning so a local perl will
             # be used
             PATH=`perl ../path_uniq -d ':' "$PATH"`
         fi
@@ -381,21 +372,25 @@ if [ -z "${INIT_SOURCED}" -o "${INIT_SOURCED}" != "TRUE" ]; then
             ;;
     esac
 
-    if [ -z "${DOMSUF}" ]; then
+    if [ -z "${DOMSUF}" -a "${OS_ARCH}" != "Android" ]; then
         echo "$SCRIPTNAME: Fatal DOMSUF env. variable is not defined."
         exit 1 #does not need to be Exit, very early in script
     fi
 
-#HOSTADDR was a workaround for the dist. stress test, and is probably 
-#not needed anymore (purpose: be able to use IP address for the server 
+#HOSTADDR was a workaround for the dist. stress test, and is probably
+#not needed anymore (purpose: be able to use IP address for the server
 #cert instead of PC name which was not in the DNS because of dyn IP address
     if [ -z "$USE_IP" -o "$USE_IP" != "TRUE" ] ; then
-        HOSTADDR=${HOST}.${DOMSUF}
+        if [ -z "${DOMSUF}" ]; then
+            HOSTADDR=${HOST}
+        else
+            HOSTADDR=${HOST}.${DOMSUF}
+        fi
     else
         HOSTADDR=${IP_ADDRESS}
     fi
 
-#if running remote side of the distributed stress test we need to use 
+#if running remote side of the distributed stress test we need to use
 #the files that the server side gives us...
     if [ -n "$DO_REM_ST" -a "$DO_REM_ST" = "TRUE" ] ; then
         for w in `ls -rtd ${TESTDIR}/${HOST}.[0-9]* 2>/dev/null |
@@ -414,14 +409,14 @@ if [ -z "${INIT_SOURCED}" -o "${INIT_SOURCED}" != "TRUE" ]; then
 
 #find the HOSTDIR, where the results are supposed to go
     if [ -n "${HOSTDIR}" ]; then
-        version=`echo $HOSTDIR | sed  -e "s/.*${HOST}.//"` 
+        version=`echo $HOSTDIR | sed  -e "s/.*${HOST}.//"`
     else
         if [ -f "${TESTDIR}/${HOST}" ]; then
             version=`cat ${TESTDIR}/${HOST}`
         else
             version=1
         fi
-#file has a tendency to disappear, messing up the rest of QA - 
+#file has a tendency to disappear, messing up the rest of QA -
 #workaround to find the next higher number if version file is not there
         if [ -z "${version}" ]; then    # for some strange reason this file
                                         # gets truncated at times... Windos
@@ -452,18 +447,18 @@ if [ -z "${INIT_SOURCED}" -o "${INIT_SOURCED}" != "TRUE" ]; then
     fi
     if [ ! -f "${RESULTS}" ]; then
         cp ${COMMON}/results_header.html ${RESULTS}
-        html "<H4>Platform: ${OBJDIR}<BR>" 
-        html "Test Run: ${HOST}.$version</H4>" 
+        html "<H4>Platform: ${OBJDIR}<BR>"
+        html "Test Run: ${HOST}.$version</H4>"
         html "${BC_ACTION}"
-        html "<HR><BR>" 
-        html "<HTML><BODY>" 
+        html "<HR><BR>"
+        html "<HTML><BODY>"
 
         echo "********************************************" | tee -a ${LOGFILE}
         echo "   Platform: ${OBJDIR}"                       | tee -a ${LOGFILE}
         echo "   Results: ${HOST}.$version"                 | tee -a ${LOGFILE}
         echo "********************************************" | tee -a ${LOGFILE}
-	echo "$BC_ACTION"                                   | tee -a ${LOGFILE}
-#if running remote side of the distributed stress test 
+        echo "$BC_ACTION"                                   | tee -a ${LOGFILE}
+#if running remote side of the distributed stress test
 # let the user know who it is...
     elif [ -n "$DO_REM_ST" -a "$DO_REM_ST" = "TRUE" ] ; then
         echo "********************************************" | tee -a ${LOGFILE}
@@ -484,7 +479,7 @@ if [ -z "${INIT_SOURCED}" -o "${INIT_SOURCED}" != "TRUE" ]; then
     else
         PS="ps"
     fi
-#found 3 rsh's so far that do not work as expected - cygnus mks6 
+#found 3 rsh's so far that do not work as expected - cygnus mks6
 #(restricted sh) and mks 7 - if it is not in c:/winnt/system32 it
 #needs to be set in the environ.ksh
     if [ -z "$RSH" ]; then
@@ -496,14 +491,14 @@ if [ -z "${INIT_SOURCED}" -o "${INIT_SOURCED}" != "TRUE" ]; then
             RSH=rsh
         fi
     fi
-   
+
 
 #more filename and directoryname init
     CURDIR=`pwd`
 
     CU_ACTION='Unknown certutil action'
 
-    # would like to preserve some tmp files, also easier to see if there 
+    # would like to preserve some tmp files, also easier to see if there
     # are "leftovers" - another possibility ${HOSTDIR}/tmp
 
     init_directories
@@ -526,8 +521,9 @@ if [ -z "${INIT_SOURCED}" -o "${INIT_SOURCED}" != "TRUE" ]; then
     D_EXT_SERVER="ExtendedServer.$version"
     D_EXT_CLIENT="ExtendedClient.$version"
     D_CERT_EXTENSTIONS="CertExtensions.$version"
+    D_DISTRUST="Distrust.$version"
 
-    # we need relative pathnames of these files abd directories, since our 
+    # we need relative pathnames of these files abd directories, since our
     # tools can't handle the unix style absolut pathnames on cygnus
 
     R_CADIR=../CA
@@ -544,6 +540,10 @@ if [ -z "${INIT_SOURCED}" -o "${INIT_SOURCED}" != "TRUE" ]; then
     R_EXT_SERVERDIR=../ext_server
     R_EXT_CLIENTDIR=../ext_client
     R_CERT_EXT=../cert_extensions
+    R_STAPLINGDIR=../stapling
+    R_SSLGTESTDIR=../ssl_gtests
+    R_PK11GTESTDIR=../pk11_gtests
+    R_DERGTESTDIR=../der_gtests
 
     #
     # profiles are either paths or domains depending on the setting of
@@ -559,15 +559,15 @@ if [ -z "${INIT_SOURCED}" -o "${INIT_SOURCED}" != "TRUE" ]; then
     P_R_EXT_SERVERDIR=${R_EXT_SERVERDIR}
     P_R_EXT_CLIENTDIR=${R_EXT_CLIENTDIR}
     if [ -n "${MULTIACCESS_DBM}" ]; then
-	P_R_CADIR="multiaccess:${D_CA}"
-	P_R_ALICEDIR="multiaccess:${D_ALICE}"
-	P_R_BOBDIR="multiaccess:${D_BOB}"
-	P_R_DAVEDIR="multiaccess:${D_DAVE}"
-	P_R_EVEDIR="multiaccess:${D_EVE}"
-	P_R_SERVERDIR="multiaccess:${D_SERVER}"
-	P_R_CLIENTDIR="multiaccess:${D_CLIENT}"
-	P_R_EXT_SERVERDIR="multiaccess:${D_EXT_SERVER}"
-	P_R_EXT_CLIENTDIR="multiaccess:${D_EXT_CLIENT}"
+        P_R_CADIR="multiaccess:${D_CA}"
+        P_R_ALICEDIR="multiaccess:${D_ALICE}"
+        P_R_BOBDIR="multiaccess:${D_BOB}"
+        P_R_DAVEDIR="multiaccess:${D_DAVE}"
+        P_R_EVEDIR="multiaccess:${D_EVE}"
+        P_R_SERVERDIR="multiaccess:${D_SERVER}"
+        P_R_CLIENTDIR="multiaccess:${D_CLIENT}"
+        P_R_EXT_SERVERDIR="multiaccess:${D_EXT_SERVER}"
+        P_R_EXT_CLIENTDIR="multiaccess:${D_EXT_CLIENT}"
     fi
 
     R_PWFILE=../tests.pw
@@ -582,13 +582,13 @@ if [ -z "${INIT_SOURCED}" -o "${INIT_SOURCED}" != "TRUE" ]; then
     export PATH LD_LIBRARY_PATH SHLIB_PATH LIBPATH DYLD_LIBRARY_PATH
     export DOMSUF HOSTADDR
     export KILL PS
-    export MOZILLA_ROOT SECURITY_ROOT DIST TESTDIR OBJDIR QADIR
+    export MOZILLA_ROOT DIST TESTDIR OBJDIR QADIR
     export LOGFILE SCRIPTNAME
 
-#used for the distributed stress test, the server generates certificates 
-#from GLOB_MIN_CERT to GLOB_MAX_CERT 
-# NOTE - this variable actually gets initialized by directly by the 
-# ssl_dist_stress.shs sl_ds_init() before init is called - need to change 
+#used for the distributed stress test, the server generates certificates
+#from GLOB_MIN_CERT to GLOB_MAX_CERT
+# NOTE - this variable actually gets initialized by directly by the
+# ssl_dist_stress.shs sl_ds_init() before init is called - need to change
 # in  both places. speaking of data encapsulatioN...
 
     if [ -z "$GLOB_MIN_CERT" ] ; then
@@ -625,7 +625,7 @@ if [ -z "${INIT_SOURCED}" -o "${INIT_SOURCED}" != "TRUE" ]; then
                      ${CRL_GRP_3_RANGE}`
 
     TOTAL_GRP_NUM=3
-    
+
     RELOAD_CRL=1
 
     NSS_DEFAULT_DB_TYPE="dbm"
@@ -649,9 +649,9 @@ if [ -z "${INIT_SOURCED}" -o "${INIT_SOURCED}" != "TRUE" ]; then
     fi
     #################################################
 
-    if [ "${OS_ARCH}" != "WINNT" ]; then
+    if [ "${OS_ARCH}" != "WINNT" -a "${OS_ARCH}" != "Android" ]; then
         ulimit -c unlimited
-    fi 
+    fi
 
     SCRIPTNAME=$0
     INIT_SOURCED=TRUE   #whatever one does - NEVER export this one please

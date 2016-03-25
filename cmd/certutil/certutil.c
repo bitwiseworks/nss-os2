@@ -1,39 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Netscape security libraries.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1994-2000
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Dr Vipul Gupta <vipul.gupta@sun.com>, Sun Microsystems Laboratories
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
 ** certutil.c
@@ -73,32 +40,26 @@
 #define MIN_KEY_BITS		512
 /* MAX_KEY_BITS should agree with MAX_RSA_MODULUS in freebl */
 #define MAX_KEY_BITS		8192
-#define DEFAULT_KEY_BITS	1024
+#define DEFAULT_KEY_BITS	2048
 
 #define GEN_BREAK(e) rv=e; break;
 
 char *progName;
 
 static CERTCertificateRequest *
-GetCertRequest(PRFileDesc *inFile, PRBool ascii)
+GetCertRequest(const SECItem *reqDER)
 {
     CERTCertificateRequest *certReq = NULL;
     CERTSignedData signedData;
-    PRArenaPool *arena = NULL;
-    SECItem reqDER;
+    PLArenaPool *arena = NULL;
     SECStatus rv;
 
-    reqDER.data = NULL;
     do {
 	arena = PORT_NewArena(DER_DEFAULT_CHUNKSIZE);
 	if (arena == NULL) {
 	    GEN_BREAK (SECFailure);
 	}
 	
- 	rv = SECU_ReadDERFromFile(&reqDER, inFile, ascii);
-	if (rv) {
-	    break;
-	}
         certReq = (CERTCertificateRequest*) PORT_ArenaZAlloc
 		  (arena, sizeof(CERTCertificateRequest));
         if (!certReq) { 
@@ -111,7 +72,7 @@ GetCertRequest(PRFileDesc *inFile, PRBool ascii)
 	 */
 	PORT_Memset(&signedData, 0, sizeof(signedData));
 	rv = SEC_ASN1DecodeItem(arena, &signedData, 
-		SEC_ASN1_GET(CERT_SignedDataTemplate), &reqDER);
+		SEC_ASN1_GET(CERT_SignedDataTemplate), reqDER);
 	if (rv) {
 	    break;
 	}
@@ -123,10 +84,6 @@ GetCertRequest(PRFileDesc *inFile, PRBool ascii)
    	rv = CERT_VerifySignedDataWithPublicKeyInfo(&signedData, 
 		&certReq->subjectPublicKeyInfo, NULL /* wincx */);
    } while (0);
-
-   if (reqDER.data) {
-   	SECITEM_FreeItem(&reqDER, PR_FALSE);
-   }
 
    if (rv) {
    	SECU_PrintError(progName, "bad certificate request\n");
@@ -141,26 +98,17 @@ GetCertRequest(PRFileDesc *inFile, PRBool ascii)
 
 static SECStatus
 AddCert(PK11SlotInfo *slot, CERTCertDBHandle *handle, char *name, char *trusts, 
-        PRFileDesc *inFile, PRBool ascii, PRBool emailcert, void *pwdata)
+        const SECItem *certDER, PRBool emailcert, void *pwdata)
 {
     CERTCertTrust *trust = NULL;
     CERTCertificate *cert = NULL;
-    SECItem certDER;
     SECStatus rv;
 
-    certDER.data = NULL;
     do {
-	/* Read in the entire file specified with the -i argument */
-	rv = SECU_ReadDERFromFile(&certDER, inFile, ascii);
-	if (rv != SECSuccess) {
-	    SECU_PrintError(progName, "unable to read input file");
-	    break;
-	}
-
 	/* Read in an ASCII cert and return a CERTCertificate */
-	cert = CERT_DecodeCertFromPackage((char *)certDER.data, certDER.len);
+	cert = CERT_DecodeCertFromPackage((char *)certDER->data, certDER->len);
 	if (!cert) {
-	    SECU_PrintError(progName, "could not obtain certificate from file"); 
+	    SECU_PrintError(progName, "could not decode certificate");
 	    GEN_BREAK(SECFailure);
 	}
 
@@ -226,27 +174,25 @@ AddCert(PK11SlotInfo *slot, CERTCertDBHandle *handle, char *name, char *trusts,
 
     CERT_DestroyCertificate (cert);
     PORT_Free(trust);
-    PORT_Free(certDER.data);
 
     return rv;
 }
 
 static SECStatus
 CertReq(SECKEYPrivateKey *privk, SECKEYPublicKey *pubk, KeyType keyType,
-        SECOidTag hashAlgTag, CERTName *subject, char *phone, int ascii, 
+        SECOidTag hashAlgTag, CERTName *subject, const char *phone, int ascii,
 	const char *emailAddrs, const char *dnsNames,
-        certutilExtnList extnList,
-        PRFileDesc *outFile)
+        certutilExtnList extnList, const char *extGeneric,
+        /*out*/ SECItem *result)
 {
     CERTSubjectPublicKeyInfo *spki;
     CERTCertificateRequest *cr;
     SECItem *encoding;
     SECOidTag signAlgTag;
-    SECItem result;
     SECStatus rv;
-    PRArenaPool *arena;
-    PRInt32 numBytes;
+    PLArenaPool *arena;
     void *extHandle;
+    SECItem signedReq = { siBuffer, NULL, 0 };
 
     /* Create info about public key */
     spki = SECKEY_CreateSubjectPublicKeyInfo(pubk);
@@ -274,7 +220,7 @@ CertReq(SECKEYPrivateKey *privk, SECKEYPublicKey *pubk, KeyType keyType,
         PORT_FreeArena (arena, PR_FALSE);
 	return SECFailure;
     }
-    if (AddExtensions(extHandle, emailAddrs, dnsNames, extnList)
+    if (AddExtensions(extHandle, emailAddrs, dnsNames, extnList, extGeneric)
                   != SECSuccess) {
         PORT_FreeArena (arena, PR_FALSE);
         return SECFailure;
@@ -299,8 +245,9 @@ CertReq(SECKEYPrivateKey *privk, SECKEYPublicKey *pubk, KeyType keyType,
 	SECU_PrintError(progName, "unknown Key or Hash type");
 	return SECFailure;
     }
-    rv = SEC_DerSignData(arena, &result, encoding->data, encoding->len, 
-			 privk, signAlgTag);
+
+    rv = SEC_DerSignData(arena, &signedReq, encoding->data, encoding->len,
+			  privk, signAlgTag);
     if (rv) {
 	PORT_FreeArena (arena, PR_FALSE);
 	SECU_PrintError(progName, "signing of data failed");
@@ -310,14 +257,12 @@ CertReq(SECKEYPrivateKey *privk, SECKEYPublicKey *pubk, KeyType keyType,
     /* Encode request in specified format */
     if (ascii) {
 	char *obuf;
-	char *name, *email, *org, *state, *country;
-	SECItem *it;
-	int total;
+	char *header, *name, *email, *org, *state, *country;
 
-	it = &result;
-
-	obuf = BTOA_ConvertItemToAscii(it);
-	total = PL_strlen(obuf);
+	obuf = BTOA_ConvertItemToAscii(&signedReq);
+	if (!obuf) {
+	    goto oom;
+	}
 
 	name = CERT_GetCommonName(subject);
 	if (!name) {
@@ -325,7 +270,7 @@ CertReq(SECKEYPrivateKey *privk, SECKEYPublicKey *pubk, KeyType keyType,
 	}
 
 	if (!phone)
-	    phone = strdup("(not specified)");
+	    phone = "(not specified)";
 
 	email = CERT_GetCertEmailAddress(subject);
 	if (!email)
@@ -343,14 +288,16 @@ CertReq(SECKEYPrivateKey *privk, SECKEYPublicKey *pubk, KeyType keyType,
 	if (!country)
 	    country = PORT_Strdup("(not specified)");
 
-	PR_fprintf(outFile, 
-	           "\nCertificate request generated by Netscape certutil\n");
-	PR_fprintf(outFile, "Phone: %s\n\n", phone);
-	PR_fprintf(outFile, "Common Name: %s\n", name);
-	PR_fprintf(outFile, "Email: %s\n", email);
-	PR_fprintf(outFile, "Organization: %s\n", org);
-	PR_fprintf(outFile, "State: %s\n", state);
-	PR_fprintf(outFile, "Country: %s\n\n", country);
+	header = PR_smprintf(
+	    "\nCertificate request generated by Netscape certutil\n"
+	    "Phone: %s\n\n"
+	    "Common Name: %s\n"
+	    "Email: %s\n"
+	    "Organization: %s\n"
+	    "State: %s\n"
+	    "Country: %s\n\n"
+	    "%s\n",
+	    phone, name, email, org, state, country, NS_CERTREQ_HEADER);
 
 	PORT_Free(name);
 	PORT_Free(email);
@@ -358,25 +305,37 @@ CertReq(SECKEYPrivateKey *privk, SECKEYPublicKey *pubk, KeyType keyType,
 	PORT_Free(state);
 	PORT_Free(country);
 
-	PR_fprintf(outFile, "%s\n", NS_CERTREQ_HEADER);
-	numBytes = PR_Write(outFile, obuf, total);
+	if (header) {
+	    char * trailer = PR_smprintf("\n%s\n", NS_CERTREQ_TRAILER);
+	    if (trailer) {
+		PRUint32 headerLen = PL_strlen(header);
+		PRUint32 obufLen = PL_strlen(obuf);
+		PRUint32 trailerLen = PL_strlen(trailer);
+		SECITEM_AllocItem(NULL, result,
+				  headerLen + obufLen + trailerLen);
+		if (result->data) {
+		    PORT_Memcpy(result->data, header, headerLen);
+		    PORT_Memcpy(result->data + headerLen, obuf, obufLen);
+		    PORT_Memcpy(result->data + headerLen + obufLen,
+				trailer, trailerLen);
+		}
+		PR_smprintf_free(trailer);
+	    }
+	    PR_smprintf_free(header);
+	}
 	PORT_Free(obuf);
-	if (numBytes != total) {
-	    PORT_FreeArena (arena, PR_FALSE);
-	    SECU_PrintError(progName, "write error");
-	    return SECFailure;
-	}
-	PR_fprintf(outFile, "\n%s\n", NS_CERTREQ_TRAILER);
     } else {
-	numBytes = PR_Write(outFile, result.data, result.len);
-	if (numBytes != (int)result.len) {
-	    PORT_FreeArena (arena, PR_FALSE);
-	    SECU_PrintSystemError(progName, "write error");
-	    return SECFailure;
-	}
+	(void) SECITEM_CopyItem(NULL, result, &signedReq);
     }
+
+    if (!result->data) {
+oom:    SECU_PrintError(progName, "out of memory");
+	PORT_SetError(SEC_ERROR_NO_MEMORY);
+	rv = SECFailure;
+    }
+
     PORT_FreeArena (arena, PR_FALSE);
-    return SECSuccess;
+    return rv;
 }
 
 static SECStatus 
@@ -462,11 +421,64 @@ DumpChain(CERTCertDBHandle *handle, char *name, PRBool ascii)
 }
 
 static SECStatus
-listCerts(CERTCertDBHandle *handle, char *name, PK11SlotInfo *slot,
-          PRBool raw, PRBool ascii, PRFileDesc *outfile, void *pwarg)
+outputCertOrExtension(CERTCertificate *the_cert, PRBool raw, PRBool ascii,
+                      SECItem *extensionOID, PRFileDesc *outfile)
 {
     SECItem data;
     PRInt32 numBytes;
+    SECStatus rv = SECFailure;
+    if (extensionOID) {
+	int i;
+	PRBool found = PR_FALSE;
+	for (i=0; the_cert->extensions[i] != NULL; i++) {
+	    CERTCertExtension *extension = the_cert->extensions[i];
+	    if (SECITEM_CompareItem(&extension->id, extensionOID) == SECEqual) {
+		found = PR_TRUE;
+		numBytes = PR_Write(outfile, extension->value.data,
+				    extension->value.len);
+		rv = SECSuccess;
+		if (numBytes != (PRInt32) extension->value.len) {
+		    SECU_PrintSystemError(progName, "error writing extension");
+		    rv = SECFailure;
+		}
+		rv = SECSuccess;
+		break;
+	    }
+	}
+	if (!found) {
+	    SECU_PrintSystemError(progName, "extension not found");
+	    rv = SECFailure;
+	}
+    } else {
+	data.data = the_cert->derCert.data;
+	data.len = the_cert->derCert.len;
+	if (ascii) {
+	    PR_fprintf(outfile, "%s\n%s\n%s\n", NS_CERT_HEADER, 
+		    BTOA_DataToAscii(data.data, data.len), NS_CERT_TRAILER);
+	    rv = SECSuccess;
+	} else if (raw) {
+	    numBytes = PR_Write(outfile, data.data, data.len);
+	    rv = SECSuccess;
+	    if (numBytes != (PRInt32) data.len) {
+		SECU_PrintSystemError(progName, "error writing raw cert");
+		rv = SECFailure;
+	    }
+	} else {
+	    rv = SEC_PrintCertificateAndTrust(the_cert, "Certificate", NULL);
+	    if (rv != SECSuccess) {
+		SECU_PrintError(progName, "problem printing certificate");
+	    }
+	}
+    }
+    return rv;
+}
+
+static SECStatus
+listCerts(CERTCertDBHandle *handle, char *name, char *email,
+	  PK11SlotInfo *slot, PRBool raw, PRBool ascii,
+	  SECItem *extensionOID,
+	  PRFileDesc *outfile, void *pwarg)
+{
     SECStatus rv = SECFailure;
     CERTCertList *certs;
     CERTCertListNode *node;
@@ -503,35 +515,29 @@ listCerts(CERTCertDBHandle *handle, char *name, PK11SlotInfo *slot,
 	}
 	for (node = CERT_LIST_HEAD(certs); !CERT_LIST_END(node,certs);
 						node = CERT_LIST_NEXT(node)) {
-	    the_cert = node->cert;
-	    /* now get the subjectList that matches this cert */
-	    data.data = the_cert->derCert.data;
-	    data.len = the_cert->derCert.len;
-	    if (ascii) {
-		PR_fprintf(outfile, "%s\n%s\n%s\n", NS_CERT_HEADER, 
-		        BTOA_DataToAscii(data.data, data.len), NS_CERT_TRAILER);
-		rv = SECSuccess;
-	    } else if (raw) {
-		numBytes = PR_Write(outfile, data.data, data.len);
-		if (numBytes != (PRInt32) data.len) {
-		   SECU_PrintSystemError(progName, "error writing raw cert");
-		    rv = SECFailure;
-		}
-		rv = SECSuccess;
-	    } else {
-		rv = SEC_PrintCertificateAndTrust(the_cert, "Certificate",
-                                                  the_cert->trust);
-		if (rv != SECSuccess) {
-		    SECU_PrintError(progName, "problem printing certificate");
-		}
-
+	    rv = outputCertOrExtension(node->cert, raw, ascii, extensionOID,
+                                       outfile);
+	    if (rv != SECSuccess) {
+		break;
 	    }
+	}
+    } else if (email) {
+	certs = PK11_FindCertsFromEmailAddress(email, NULL);
+	if (!certs) {
+	    SECU_PrintError(progName, 
+			"Could not find certificates for email address: %s\n", 
+			email);
+	    return SECFailure;
+	}
+	for (node = CERT_LIST_HEAD(certs); !CERT_LIST_END(node,certs);
+						node = CERT_LIST_NEXT(node)) {
+	    rv = outputCertOrExtension(node->cert, raw, ascii, extensionOID,
+                                       outfile);
 	    if (rv != SECSuccess) {
 		break;
 	    }
 	}
     } else {
-
 	certs = PK11_ListCertsInSlot(slot);
 	if (certs) {
 	    for (node = CERT_LIST_HEAD(certs); !CERT_LIST_END(node,certs);
@@ -553,12 +559,14 @@ listCerts(CERTCertDBHandle *handle, char *name, PK11SlotInfo *slot,
 }
 
 static SECStatus
-ListCerts(CERTCertDBHandle *handle, char *nickname, PK11SlotInfo *slot,
-          PRBool raw, PRBool ascii, PRFileDesc *outfile, secuPWData *pwdata)
+ListCerts(CERTCertDBHandle *handle, char *nickname, char *email, 
+          PK11SlotInfo *slot, PRBool raw, PRBool ascii,
+	  SECItem *extensionOID,
+	  PRFileDesc *outfile, secuPWData *pwdata)
 {
     SECStatus rv;
 
-    if (!ascii && !raw && !nickname) {
+    if (!ascii && !raw && !nickname && !email) {
         PR_fprintf(outfile, "\n%-60s %-5s\n%-60s %-5s\n\n",
                    "Certificate Nickname", "Trust Attributes", "",
                    "SSL,S/MIME,JAR/XPI");
@@ -569,15 +577,14 @@ ListCerts(CERTCertDBHandle *handle, char *nickname, PK11SlotInfo *slot,
 
 	list = PK11_ListCerts(PK11CertListAll, pwdata);
 	for (node = CERT_LIST_HEAD(list); !CERT_LIST_END(node, list);
-	     node = CERT_LIST_NEXT(node)) 
-	{
+	     node = CERT_LIST_NEXT(node)) {
 	    SECU_PrintCertNickname(node, stdout);
 	}
 	CERT_DestroyCertList(list);
 	return SECSuccess;
-    } else {
-	rv = listCerts(handle,nickname,slot,raw,ascii,outfile,pwdata);
-    }
+    } 
+    rv = listCerts(handle, nickname, email, slot, raw, ascii,
+                   extensionOID, outfile, pwdata);
     return rv;
 }
 
@@ -598,10 +605,29 @@ DeleteCert(CERTCertDBHandle *handle, char *name)
     CERT_DestroyCertificate(cert);
     if (rv) {
 	SECU_PrintError(progName, "unable to delete certificate");
+    }
+    return rv;
+}
+
+static SECStatus 
+RenameCert(CERTCertDBHandle *handle, char *name, char *newName)
+{
+    SECStatus rv;
+    CERTCertificate *cert;
+
+    cert = CERT_FindCertByNicknameOrEmailAddr(handle, name);
+    if (!cert) {
+	SECU_PrintError(progName, "could not find certificate named \"%s\"",
+			name);
 	return SECFailure;
     }
 
-    return SECSuccess;
+    rv = __PK11_SetCertificateNickname(cert, newName);
+    CERT_DestroyCertificate(cert);
+    if (rv) {
+	SECU_PrintError(progName, "unable to rename certificate");
+    }
+    return rv;
 }
 
 static SECStatus
@@ -611,7 +637,7 @@ ValidateCert(CERTCertDBHandle *handle, char *name, char *date,
 {
     SECStatus rv;
     CERTCertificate *cert = NULL;
-    int64 timeBoundary;
+    PRTime timeBoundary;
     SECCertificateUsage usage;
     CERTVerifyLog reallog;
     CERTVerifyLog *log = NULL;
@@ -624,6 +650,15 @@ ValidateCert(CERTCertDBHandle *handle, char *name, char *date,
     switch (*certUsage) {
 	case 'O':
 	    usage = certificateUsageStatusResponder;
+	    break;
+	case 'L':
+	    usage = certificateUsageSSLCA;
+	    break;
+	case 'A':
+	    usage = certificateUsageAnyCA;
+	    break;
+	case 'Y':
+	    usage = certificateUsageVerifyCA;
 	    break;
 	case 'C':
 	    usage = certificateUsageSSLClient;
@@ -951,32 +986,36 @@ ListModules(void)
 }
 
 static void 
-Usage(char *progName)
+PrintSyntax(char *progName)
 {
 #define FPS fprintf(stderr, 
     FPS "Type %s -H for more detailed descriptions\n", progName);
-    FPS "Usage:  %s -N [-d certdir] [-P dbprefix] [-f pwfile]\n", progName);
+    FPS "Usage:  %s -N [-d certdir] [-P dbprefix] [-f pwfile] [--empty-password]\n", progName);
     FPS "Usage:  %s -T [-d certdir] [-P dbprefix] [-h token-name]\n"
 	"\t\t [-f pwfile] [-0 SSO-password]\n", progName);
-    FPS "\t%s -A -n cert-name -t trustargs [-d certdir] [-P dbprefix] [-a] [-i input]\n", 
+    FPS "\t%s -A -n cert-name -t trustargs [-d certdir] [-P dbprefix] [-a] [-i input]\n",
     	progName);
     FPS "\t%s -B -i batch-file\n", progName);
     FPS "\t%s -C [-c issuer-name | -x] -i cert-request-file -o cert-file\n"
 	"\t\t [-m serial-number] [-w warp-months] [-v months-valid]\n"
-        "\t\t [-f pwfile] [-d certdir] [-P dbprefix]\n"
+        "\t\t [-f pwfile] [-d certdir] [-P dbprefix] [-Z hashAlg]\n"
         "\t\t [-1 | --keyUsage [keyUsageKeyword,..]] [-2] [-3] [-4]\n"
         "\t\t [-5 | --nsCertType [nsCertTypeKeyword,...]]\n"
         "\t\t [-6 | --extKeyUsage [extKeyUsageKeyword,...]] [-7 emailAddrs]\n"
         "\t\t [-8 dns-names] [-a]\n",
 	progName);
     FPS "\t%s -D -n cert-name [-d certdir] [-P dbprefix]\n", progName);
-    FPS "\t%s -E -n cert-name -t trustargs [-d certdir] [-P dbprefix] [-a] [-i input]\n", 
+    FPS "\t%s --rename -n cert-name --new-n new-cert-name\n"
+        "\t\t [-d certdir] [-P dbprefix]\n", progName);
+    FPS "\t%s -E -n cert-name -t trustargs [-d certdir] [-P dbprefix] [-a] [-i input]\n",
+	progName);
+    FPS "\t%s -F -n nickname [-d certdir] [-P dbprefix]\n", 
 	progName);
     FPS "\t%s -G -n key-name [-h token-name] [-k rsa] [-g key-size] [-y exp]\n" 
 	"\t\t [-f pwfile] [-z noisefile] [-d certdir] [-P dbprefix]\n", progName);
     FPS "\t%s -G [-h token-name] -k dsa [-q pqgfile -g key-size] [-f pwfile]\n"
 	"\t\t [-z noisefile] [-d certdir] [-P dbprefix]\n", progName);
-#ifdef NSS_ENABLE_ECC
+#ifndef NSS_DISABLE_ECC
     FPS "\t%s -G [-h token-name] -k ec -q curve [-f pwfile]\n"
 	"\t\t [-z noisefile] [-d certdir] [-P dbprefix]\n", progName);
     FPS "\t%s -K [-n key-name] [-h token-name] [-k dsa|ec|rsa|all]\n", 
@@ -984,7 +1023,7 @@ Usage(char *progName)
 #else
     FPS "\t%s -K [-n key-name] [-h token-name] [-k dsa|rsa|all]\n", 
 	progName);
-#endif /* NSS_ENABLE_ECC */
+#endif /* NSS_DISABLE_ECC */
     FPS "\t\t [-f pwfile] [-X] [-d certdir] [-P dbprefix]\n");
     FPS "\t%s --upgrade-merge --source-dir upgradeDir --upgrade-id uniqueID\n",
 	progName);
@@ -995,12 +1034,15 @@ Usage(char *progName)
 	progName);
     FPS "\t\t [-P targetDBPrefix] [--source-prefix sourceDBPrefix]\n");
     FPS "\t\t [-f targetPWfile] [-@ sourcePWFile]\n");
-    FPS "\t%s -L [-n cert-name] [-X] [-d certdir] [-P dbprefix] [-r] [-a]\n", progName);
+    FPS "\t%s -L [-n cert-name] [-h token-name] [--email email-address]\n",
+	progName);
+    FPS "\t\t [-X] [-r] [-a] [--dump-ext-val OID] [-d certdir] [-P dbprefix]\n");
     FPS "\t%s -M -n cert-name -t trustargs [-d certdir] [-P dbprefix]\n",
 	progName);
     FPS "\t%s -O -n cert-name [-X] [-d certdir] [-a] [-P dbprefix]\n", progName);
     FPS "\t%s -R -s subj -o cert-request-file [-d certdir] [-P dbprefix] [-p phone] [-a]\n"
-	"\t\t [-7 emailAddrs] [-k key-type-or-id] [-h token-name] [-f pwfile] [-g key-size]\n",
+        "\t\t [-7 emailAddrs] [-k key-type-or-id] [-h token-name] [-f pwfile]\n"
+        "\t\t [-g key-size] [-Z hashAlg]\n",
 	progName);
     FPS "\t%s -V -n cert-name -u usage [-b time] [-e] [-a]\n"
 	"\t\t[-X] [-d certdir] [-P dbprefix]\n",
@@ -1010,33 +1052,69 @@ Usage(char *progName)
     FPS "\t%s -S -n cert-name -s subj [-c issuer-name | -x]  -t trustargs\n"
 	"\t\t [-k key-type-or-id] [-q key-params] [-h token-name] [-g key-size]\n"
         "\t\t [-m serial-number] [-w warp-months] [-v months-valid]\n"
-	"\t\t [-f pwfile] [-d certdir] [-P dbprefix]\n"
+        "\t\t [-f pwfile] [-d certdir] [-P dbprefix] [-Z hashAlg]\n"
         "\t\t [-p phone] [-1] [-2] [-3] [-4] [-5] [-6] [-7 emailAddrs]\n"
         "\t\t [-8 DNS-names]\n"
         "\t\t [--extAIA] [--extSIA] [--extCP] [--extPM] [--extPC] [--extIA]\n"
-        "\t\t [--extSKID]\n", progName);
+        "\t\t [--extSKID] [--extNC] [--extSAN type:name[,type:name]...]\n"
+	"\t\t [--extGeneric OID:critical-flag:filename[,OID:critical-flag:filename]...]\n", progName);
     FPS "\t%s -U [-X] [-d certdir] [-P dbprefix]\n", progName);
     exit(1);
 }
 
-static void LongUsage(char *progName)
-{
+enum usage_level {
+    usage_all = 0, usage_selected = 1
+};
 
+static void luCommonDetailsAE();
+
+static void luA(enum usage_level ul, const char *command)
+{
+    int is_my_command = (command && 0 == strcmp(command, "A"));
+    if (ul == usage_all || !command || is_my_command)
     FPS "%-15s Add a certificate to the database        (create if needed)\n",
-	"-A");
+        "-A");
+    if (ul == usage_selected && !is_my_command)
+        return;
+    if (ul == usage_all) {
     FPS "%-20s\n", "   All options under -E apply");
+    }
+    else {
+        luCommonDetailsAE();
+    }
+}
+
+static void luB(enum usage_level ul, const char *command)
+{
+    int is_my_command = (command && 0 == strcmp(command, "B"));
+    if (ul == usage_all || !command || is_my_command)
     FPS "%-15s Run a series of certutil commands from a batch file\n", "-B");
+    if (ul == usage_selected && !is_my_command)
+        return;
     FPS "%-20s Specify the batch file\n", "   -i batch-file");
+}
+
+static void luE(enum usage_level ul, const char *command)
+{
+    int is_my_command = (command && 0 == strcmp(command, "E"));
+    if (ul == usage_all || !command || is_my_command)
     FPS "%-15s Add an Email certificate to the database (create if needed)\n",
-	"-E");
+        "-E");
+    if (ul == usage_selected && !is_my_command)
+        return;
+    luCommonDetailsAE();
+}
+
+static void luCommonDetailsAE()
+{
     FPS "%-20s Specify the nickname of the certificate to add\n",
-	"   -n cert-name");
+        "   -n cert-name");
     FPS "%-20s Set the certificate trust attributes:\n",
-	"   -t trustargs");
+        "   -t trustargs");
     FPS "%-25s trustargs is of the form x,y,z where x is for SSL, y is for S/MIME,\n", "");
-    FPS "%-25s and z is for code signing\n", "");
-    FPS "%-25s p \t valid peer\n", "");
-    FPS "%-25s P \t trusted peer (implies p)\n", "");
+    FPS "%-25s and z is for code signing. Use ,, for no explicit trust.\n", "");
+    FPS "%-25s p \t prohibited (explicitly distrusted)\n", "");
+    FPS "%-25s P \t trusted peer\n", "");
     FPS "%-25s c \t valid CA\n", "");
     FPS "%-25s T \t trusted CA to issue client certs (implies c)\n", "");
     FPS "%-25s C \t trusted CA to issue server certs (implies c)\n", "");
@@ -1044,39 +1122,51 @@ static void LongUsage(char *progName)
     FPS "%-25s w \t send warning\n", "");
     FPS "%-25s g \t make step-up cert\n", "");
     FPS "%-20s Specify the password file\n",
-	"   -f pwfile");
+        "   -f pwfile");
     FPS "%-20s Cert database directory (default is ~/.netscape)\n",
-	"   -d certdir");
+        "   -d certdir");
     FPS "%-20s Cert & Key database prefix\n",
-	"   -P dbprefix");
+        "   -P dbprefix");
     FPS "%-20s The input certificate is encoded in ASCII (RFC1113)\n",
-	"   -a");
+        "   -a");
     FPS "%-20s Specify the certificate file (default is stdin)\n",
-	"   -i input");
+        "   -i input");
     FPS "\n");
+}
 
+static void luC(enum usage_level ul, const char *command)
+{
+    int is_my_command = (command && 0 == strcmp(command, "C"));
+    if (ul == usage_all || !command || is_my_command)
     FPS "%-15s Create a new binary certificate from a BINARY cert request\n",
-	"-C");
+        "-C");
+    if (ul == usage_selected && !is_my_command)
+        return;
     FPS "%-20s The nickname of the issuer cert\n",
-	"   -c issuer-name");
+        "   -c issuer-name");
     FPS "%-20s The BINARY certificate request file\n",
-	"   -i cert-request ");
+        "   -i cert-request ");
     FPS "%-20s Output binary cert to this file (default is stdout)\n",
-	"   -o output-cert");
+        "   -o output-cert");
     FPS "%-20s Self sign\n",
-	"   -x");
+        "   -x");
     FPS "%-20s Cert serial number\n",
-	"   -m serial-number");
+        "   -m serial-number");
     FPS "%-20s Time Warp\n",
-	"   -w warp-months");
+        "   -w warp-months");
     FPS "%-20s Months valid (default is 3)\n",
         "   -v months-valid");
     FPS "%-20s Specify the password file\n",
-	"   -f pwfile");
+        "   -f pwfile");
     FPS "%-20s Cert database directory (default is ~/.netscape)\n",
-	"   -d certdir");
+        "   -d certdir");
     FPS "%-20s Cert & Key database prefix\n",
-	"   -P dbprefix");
+        "   -P dbprefix");
+    FPS "%-20s \n"
+              "%-20s Specify the hash algorithm to use. Possible keywords:\n"
+              "%-20s \"MD2\", \"MD4\", \"MD5\", \"SHA1\", \"SHA224\",\n"
+              "%-20s \"SHA256\", \"SHA384\", \"SHA512\"\n",
+        "   -Z hashAlg", "", "", "");
     FPS "%-20s \n"
               "%-20s Create key usage extension. Possible keywords:\n"
               "%-20s \"digitalSignature\", \"nonRepudiation\", \"keyEncipherment\",\n"
@@ -1084,56 +1174,63 @@ static void LongUsage(char *progName)
               "%-20s \"crlSigning\", \"critical\"\n",
         "   -1 | --keyUsage keyword,keyword,...", "", "", "", "");
     FPS "%-20s Create basic constraint extension\n",
-	"   -2 ");
+        "   -2 ");
     FPS "%-20s Create authority key ID extension\n",
-	"   -3 ");
+        "   -3 ");
     FPS "%-20s Create crl distribution point extension\n",
-	"   -4 ");
+        "   -4 ");
     FPS "%-20s \n"
               "%-20s Create netscape cert type extension. Possible keywords:\n"
               "%-20s \"sslClient\", \"sslServer\", \"smime\", \"objectSigning\",\n"
               "%-20s \"sslCA\", \"smimeCA\", \"objectSigningCA\", \"critical\".\n",
-        "   -5 | -nsCertType keyword,keyword,... ", "", "", "");
+        "   -5 | --nsCertType keyword,keyword,... ", "", "", "");
     FPS "%-20s \n"
               "%-20s Create extended key usage extension. Possible keywords:\n"
               "%-20s \"serverAuth\", \"clientAuth\",\"codeSigning\",\n"
               "%-20s \"emailProtection\", \"timeStamp\",\"ocspResponder\",\n"
-              "%-20s \"stepUp\", \"critical\"\n",
-	"   -6 | --extKeyUsage keyword,keyword,...", "", "", "", "");
+              "%-20s \"stepUp\", \"msTrustListSign\", \"critical\"\n",
+        "   -6 | --extKeyUsage keyword,keyword,...", "", "", "", "");
     FPS "%-20s Create an email subject alt name extension\n",
-	"   -7 emailAddrs");
+        "   -7 emailAddrs");
     FPS "%-20s Create an dns subject alt name extension\n",
-	"   -8 dnsNames");
+        "   -8 dnsNames");
     FPS "%-20s The input certificate request is encoded in ASCII (RFC1113)\n",
-	"   -a");
+        "   -a");
     FPS "\n");
+}
 
+static void luG(enum usage_level ul, const char *command)
+{
+    int is_my_command = (command && 0 == strcmp(command, "G"));
+    if (ul == usage_all || !command || is_my_command)
     FPS "%-15s Generate a new key pair\n",
-	"-G");
+        "-G");
+    if (ul == usage_selected && !is_my_command)
+        return;
     FPS "%-20s Name of token in which to generate key (default is internal)\n",
-	"   -h token-name");
-#ifdef NSS_ENABLE_ECC
+        "   -h token-name");
+#ifndef NSS_DISABLE_ECC
     FPS "%-20s Type of key pair to generate (\"dsa\", \"ec\", \"rsa\" (default))\n",
-	"   -k key-type");
+        "   -k key-type");
     FPS "%-20s Key size in bits, (min %d, max %d, default %d) (not for ec)\n",
-	"   -g key-size", MIN_KEY_BITS, MAX_KEY_BITS, DEFAULT_KEY_BITS);
+        "   -g key-size", MIN_KEY_BITS, MAX_KEY_BITS, DEFAULT_KEY_BITS);
 #else
     FPS "%-20s Type of key pair to generate (\"dsa\", \"rsa\" (default))\n",
-	"   -k key-type");
+        "   -k key-type");
     FPS "%-20s Key size in bits, (min %d, max %d, default %d)\n",
-	"   -g key-size", MIN_KEY_BITS, MAX_KEY_BITS, DEFAULT_KEY_BITS);
-#endif /* NSS_ENABLE_ECC */
+        "   -g key-size", MIN_KEY_BITS, MAX_KEY_BITS, DEFAULT_KEY_BITS);
+#endif /* NSS_DISABLE_ECC */
     FPS "%-20s Set the public exponent value (3, 17, 65537) (rsa only)\n",
-	"   -y exp");
+        "   -y exp");
     FPS "%-20s Specify the password file\n",
         "   -f password-file");
     FPS "%-20s Specify the noise file to be used\n",
-	"   -z noisefile");
+        "   -z noisefile");
     FPS "%-20s read PQG value from pqgfile (dsa only)\n",
-	"   -q pqgfile");
-#ifdef NSS_ENABLE_ECC
+        "   -q pqgfile");
+#ifndef NSS_DISABLE_ECC
     FPS "%-20s Elliptic curve name (ec only)\n",
-	"   -q curve-name");
+        "   -q curve-name");
     FPS "%-20s One of nistp256, nistp384, nistp521\n", "");
 #ifdef NSS_ECC_MORE_THAN_SUITE_B
     FPS "%-20s sect163k1, nistk163, sect163r1, sect163r2,\n", "");
@@ -1156,306 +1253,540 @@ static void LongUsage(char *progName)
 #endif /* NSS_ECC_MORE_THAN_SUITE_B */
 #endif
     FPS "%-20s Key database directory (default is ~/.netscape)\n",
-	"   -d keydir");
+        "   -d keydir");
     FPS "%-20s Cert & Key database prefix\n",
-	"   -P dbprefix");
+        "   -P dbprefix");
+    FPS "%-20s\n"
+        "%-20s PKCS #11 key Attributes.\n",
+        "   --keyAttrFlags attrflags", "");
+    FPS "%-20s Comma separated list of key attribute attribute flags,\n", "");
+    FPS "%-20s selected from the following list of choices:\n", "");
+    FPS "%-20s {token | session} {public | private} {sensitive | insensitive}\n", "");
+    FPS "%-20s {modifiable | unmodifiable} {extractable | unextractable}\n", "");
+    FPS "%-20s\n",
+        "   --keyOpFlagsOn opflags");
+    FPS "%-20s\n"
+        "%-20s PKCS #11 key Operation Flags.\n",
+        "   --keyOpFlagsOff opflags", "");
+    FPS "%-20s Comma separated list of one or more of the following:\n", "");
+    FPS "%-20s encrypt, decrypt, sign, sign_recover, verify,\n", "");
+    FPS "%-20s verify_recover, wrap, unwrap, derive\n", "");
     FPS "\n");
+}
 
+static void luD(enum usage_level ul, const char *command)
+{
+    int is_my_command = (command && 0 == strcmp(command, "D"));
+    if (ul == usage_all || !command || is_my_command)
     FPS "%-15s Delete a certificate from the database\n",
-	"-D");
+        "-D");
+    if (ul == usage_selected && !is_my_command)
+        return;
     FPS "%-20s The nickname of the cert to delete\n",
-	"   -n cert-name");
+        "   -n cert-name");
     FPS "%-20s Cert database directory (default is ~/.netscape)\n",
-	"   -d certdir");
+        "   -d certdir");
     FPS "%-20s Cert & Key database prefix\n",
-	"   -P dbprefix");
+        "   -P dbprefix");
     FPS "\n");
 
+}
+
+static void luF(enum usage_level ul, const char *command)
+{
+    int is_my_command = (command && 0 == strcmp(command, "F"));
+    if (ul == usage_all || !command || is_my_command)
+    FPS "%-15s Delete a key from the database\n",
+        "-F");
+    if (ul == usage_selected && !is_my_command)
+        return;
+    FPS "%-20s The nickname of the key to delete\n",
+        "   -n cert-name");
+    FPS "%-20s Cert database directory (default is ~/.netscape)\n",
+        "   -d certdir");
+    FPS "%-20s Cert & Key database prefix\n",
+        "   -P dbprefix");
+    FPS "\n");
+
+}
+
+static void luU(enum usage_level ul, const char *command)
+{
+    int is_my_command = (command && 0 == strcmp(command, "U"));
+    if (ul == usage_all || !command || is_my_command)
     FPS "%-15s List all modules\n", /*, or print out a single named module\n",*/
         "-U");
+    if (ul == usage_selected && !is_my_command)
+        return;
     FPS "%-20s Module database directory (default is '~/.netscape')\n",
         "   -d moddir");
     FPS "%-20s Cert & Key database prefix\n",
-	"   -P dbprefix");
+        "   -P dbprefix");
     FPS "%-20s force the database to open R/W\n",
-	"   -X");
+        "   -X");
     FPS "\n");
 
+}
+
+static void luK(enum usage_level ul, const char *command)
+{
+    int is_my_command = (command && 0 == strcmp(command, "K"));
+    if (ul == usage_all || !command || is_my_command)
     FPS "%-15s List all private keys\n",
         "-K");
-          FPS "%-20s Name of token to search (\"all\" for all tokens)\n",
-	"   -h token-name ");
+    if (ul == usage_selected && !is_my_command)
+        return;
+    FPS "%-20s Name of token to search (\"all\" for all tokens)\n",
+        "   -h token-name ");
 
     FPS "%-20s Key type (\"all\" (default), \"dsa\","
-#ifdef NSS_ENABLE_ECC
+#ifndef NSS_DISABLE_ECC
                                                     " \"ec\","
 #endif
-                                                             " \"rsa\")\n",
-	"   -k key-type");
+                                                    " \"rsa\")\n",
+        "   -k key-type");
     FPS "%-20s The nickname of the key or associated certificate\n",
-	"   -n name");
+        "   -n name");
     FPS "%-20s Specify the password file\n",
         "   -f password-file");
     FPS "%-20s Key database directory (default is ~/.netscape)\n",
-	"   -d keydir");
+        "   -d keydir");
     FPS "%-20s Cert & Key database prefix\n",
-	"   -P dbprefix");
+        "   -P dbprefix");
     FPS "%-20s force the database to open R/W\n",
-	"   -X");
+        "   -X");
     FPS "\n");
+}
 
-    FPS "%-15s List all certs, or print out a single named cert\n",
-	"-L");
+static void luL(enum usage_level ul, const char *command)
+{
+    int is_my_command = (command && 0 == strcmp(command, "L"));
+    if (ul == usage_all || !command || is_my_command)
+    FPS "%-15s List all certs, or print out a single named cert (or a subset)\n",
+        "-L");
+    if (ul == usage_selected && !is_my_command)
+        return;
+    FPS "%-20s Name of token to search (\"all\" for all tokens)\n",
+        "   -h token-name ");
     FPS "%-20s Pretty print named cert (list all if unspecified)\n",
-	"   -n cert-name");
+        "   -n cert-name");
+    FPS "%-20s \n"
+              "%-20s Pretty print cert with email address (list all if unspecified)\n",
+        "   --email email-address", "");
     FPS "%-20s Cert database directory (default is ~/.netscape)\n",
-	"   -d certdir");
+        "   -d certdir");
     FPS "%-20s Cert & Key database prefix\n",
-	"   -P dbprefix");
+        "   -P dbprefix");
     FPS "%-20s force the database to open R/W\n",
-	"   -X");
+        "   -X");
     FPS "%-20s For single cert, print binary DER encoding\n",
-	"   -r");
+        "   -r");
     FPS "%-20s For single cert, print ASCII encoding (RFC1113)\n",
-	"   -a");
+        "   -a");
+    FPS "%-20s \n"
+              "%-20s For single cert, print binary DER encoding of extension OID\n",
+        "   --dump-ext-val OID", "");
     FPS "\n");
+}
 
+static void luM(enum usage_level ul, const char *command)
+{
+    int is_my_command = (command && 0 == strcmp(command, "M"));
+    if (ul == usage_all || !command || is_my_command)
     FPS "%-15s Modify trust attributes of certificate\n",
-	"-M");
+        "-M");
+    if (ul == usage_selected && !is_my_command)
+        return;
     FPS "%-20s The nickname of the cert to modify\n",
-	"   -n cert-name");
+        "   -n cert-name");
     FPS "%-20s Set the certificate trust attributes (see -A above)\n",
-	"   -t trustargs");
+        "   -t trustargs");
     FPS "%-20s Cert database directory (default is ~/.netscape)\n",
-	"   -d certdir");
+        "   -d certdir");
     FPS "%-20s Cert & Key database prefix\n",
-	"   -P dbprefix");
+        "   -P dbprefix");
     FPS "\n");
+}
 
+static void luN(enum usage_level ul, const char *command)
+{
+    int is_my_command = (command && 0 == strcmp(command, "N"));
+    if (ul == usage_all || !command || is_my_command)
     FPS "%-15s Create a new certificate database\n",
-	"-N");
+        "-N");
+    if (ul == usage_selected && !is_my_command)
+        return;
     FPS "%-20s Cert database directory (default is ~/.netscape)\n",
-	"   -d certdir");
+        "   -d certdir");
     FPS "%-20s Cert & Key database prefix\n",
-	"   -P dbprefix");
+        "   -P dbprefix");
+    FPS "%-20s Specify the password file\n",
+        "   -f password-file");
+    FPS "%-20s use empty password when creating a new database\n",
+        "   --empty-password");
     FPS "\n");
+}
+
+static void luT(enum usage_level ul, const char *command)
+{
+    int is_my_command = (command && 0 == strcmp(command, "T"));
+    if (ul == usage_all || !command || is_my_command)
     FPS "%-15s Reset the Key database or token\n",
-	"-T");
+        "-T");
+    if (ul == usage_selected && !is_my_command)
+        return;
     FPS "%-20s Cert database directory (default is ~/.netscape)\n",
-	"   -d certdir");
+        "   -d certdir");
     FPS "%-20s Cert & Key database prefix\n",
-	"   -P dbprefix");
+        "   -P dbprefix");
     FPS "%-20s Token to reset (default is internal)\n",
-	"   -h token-name");
+        "   -h token-name");
     FPS "%-20s Set token's Site Security Officer password\n",
-	"   -0 SSO-password");
+        "   -0 SSO-password");
     FPS "\n");
+}
 
-    FPS "\n");
+static void luO(enum usage_level ul, const char *command)
+{
+    int is_my_command = (command && 0 == strcmp(command, "O"));
+    if (ul == usage_all || !command || is_my_command)
     FPS "%-15s Print the chain of a certificate\n",
-	"-O");
+        "-O");
+    if (ul == usage_selected && !is_my_command)
+        return;
     FPS "%-20s The nickname of the cert to modify\n",
-	"   -n cert-name");
+        "   -n cert-name");
     FPS "%-20s Cert database directory (default is ~/.netscape)\n",
-	"   -d certdir");
+        "   -d certdir");
     FPS "%-20s Input the certificate in ASCII (RFC1113); default is binary\n",
-	"   -a");
+        "   -a");
     FPS "%-20s Cert & Key database prefix\n",
-	"   -P dbprefix");
+        "   -P dbprefix");
     FPS "%-20s force the database to open R/W\n",
-	"   -X");
+        "   -X");
     FPS "\n");
+}
 
+static void luR(enum usage_level ul, const char *command)
+{
+    int is_my_command = (command && 0 == strcmp(command, "R"));
+    if (ul == usage_all || !command || is_my_command)
     FPS "%-15s Generate a certificate request (stdout)\n",
-	"-R");
+        "-R");
+    if (ul == usage_selected && !is_my_command)
+        return;
     FPS "%-20s Specify the subject name (using RFC1485)\n",
-	"   -s subject");
+        "   -s subject");
     FPS "%-20s Output the cert request to this file\n",
-	"   -o output-req");
-#ifdef NSS_ENABLE_ECC
+        "   -o output-req");
+#ifndef NSS_DISABLE_ECC
     FPS "%-20s Type of key pair to generate (\"dsa\", \"ec\", \"rsa\" (default))\n",
 #else
     FPS "%-20s Type of key pair to generate (\"dsa\", \"rsa\" (default))\n",
-#endif /* NSS_ENABLE_ECC */
-	"   -k key-type-or-id");
+#endif /* NSS_DISABLE_ECC */
+        "   -k key-type-or-id");
     FPS "%-20s or nickname of the cert key to use \n",
-	"");
+        "");
     FPS "%-20s Name of token in which to generate key (default is internal)\n",
-	"   -h token-name");
+        "   -h token-name");
     FPS "%-20s Key size in bits, RSA keys only (min %d, max %d, default %d)\n",
-	"   -g key-size", MIN_KEY_BITS, MAX_KEY_BITS, DEFAULT_KEY_BITS);
+        "   -g key-size", MIN_KEY_BITS, MAX_KEY_BITS, DEFAULT_KEY_BITS);
     FPS "%-20s Name of file containing PQG parameters (dsa only)\n",
-	"   -q pqgfile");
-#ifdef NSS_ENABLE_ECC
+        "   -q pqgfile");
+#ifndef NSS_DISABLE_ECC
     FPS "%-20s Elliptic curve name (ec only)\n",
-	"   -q curve-name");
+        "   -q curve-name");
     FPS "%-20s See the \"-G\" option for a full list of supported names.\n",
-	"");
-#endif /* NSS_ENABLE_ECC */
+        "");
+#endif /* NSS_DISABLE_ECC */
     FPS "%-20s Specify the password file\n",
-	"   -f pwfile");
+        "   -f pwfile");
     FPS "%-20s Key database directory (default is ~/.netscape)\n",
-	"   -d keydir");
+        "   -d keydir");
     FPS "%-20s Cert & Key database prefix\n",
-	"   -P dbprefix");
+        "   -P dbprefix");
     FPS "%-20s Specify the contact phone number (\"123-456-7890\")\n",
-	"   -p phone");
+        "   -p phone");
+    FPS "%-20s \n"
+              "%-20s Specify the hash algorithm to use. Possible keywords:\n"
+              "%-20s \"MD2\", \"MD4\", \"MD5\", \"SHA1\", \"SHA224\",\n"
+              "%-20s \"SHA256\", \"SHA384\", \"SHA512\"\n",
+        "   -Z hashAlg", "", "", "");
     FPS "%-20s Output the cert request in ASCII (RFC1113); default is binary\n",
-	"   -a");
+        "   -a");
     FPS "%-20s \n",
-	"   See -S for available extension options");
+        "   See -S for available extension options");
+    FPS "%-20s \n",
+        "   See -G for available key flag options");
     FPS "\n");
+}
 
+static void luV(enum usage_level ul, const char *command)
+{
+    int is_my_command = (command && 0 == strcmp(command, "V"));
+    if (ul == usage_all || !command || is_my_command)
     FPS "%-15s Validate a certificate\n",
-	"-V");
+        "-V");
+    if (ul == usage_selected && !is_my_command)
+        return;
     FPS "%-20s The nickname of the cert to Validate\n",
-	"   -n cert-name");
+        "   -n cert-name");
     FPS "%-20s validity time (\"YYMMDDHHMMSS[+HHMM|-HHMM|Z]\")\n",
-	"   -b time");
+        "   -b time");
     FPS "%-20s Check certificate signature \n",
-	"   -e ");   
+        "   -e ");   
     FPS "%-20s Specify certificate usage:\n", "   -u certusage");
     FPS "%-25s C \t SSL Client\n", "");
     FPS "%-25s V \t SSL Server\n", "");
+    FPS "%-25s L \t SSL CA\n", "");
+    FPS "%-25s A \t Any CA\n", "");
+    FPS "%-25s Y \t Verify CA\n", "");
     FPS "%-25s S \t Email signer\n", "");
     FPS "%-25s R \t Email Recipient\n", "");   
     FPS "%-25s O \t OCSP status responder\n", "");   
     FPS "%-25s J \t Object signer\n", "");   
     FPS "%-20s Cert database directory (default is ~/.netscape)\n",
-	"   -d certdir");
+        "   -d certdir");
     FPS "%-20s Input the certificate in ASCII (RFC1113); default is binary\n",
-	"   -a");
+        "   -a");
     FPS "%-20s Cert & Key database prefix\n",
-	"   -P dbprefix");
+        "   -P dbprefix");
     FPS "%-20s force the database to open R/W\n",
-	"   -X");
+        "   -X");
     FPS "\n");
+}
 
+static void luW(enum usage_level ul, const char *command)
+{
+    int is_my_command = (command && 0 == strcmp(command, "W"));
+    if (ul == usage_all || !command || is_my_command)
     FPS "%-15s Change the key database password\n",
-	"-W");
+        "-W");
+    if (ul == usage_selected && !is_my_command)
+        return;
     FPS "%-20s cert and key database directory\n",
-	"   -d certdir");
+        "   -d certdir");
     FPS "%-20s Specify a file with the current password\n",
-	"   -f pwfile");
+        "   -f pwfile");
     FPS "%-20s Specify a file with the new password in two lines\n",
-	"   -@ newpwfile");
+        "   -@ newpwfile");
+    FPS "\n");
+}
 
+static void luRename(enum usage_level ul, const char *command)
+{
+    int is_my_command = (command && 0 == strcmp(command, "rename"));
+    if (ul == usage_all || !command || is_my_command)
+    FPS "%-15s Change the database nickname of a certificate\n",
+        "--rename");
+    if (ul == usage_selected && !is_my_command)
+        return;
+    FPS "%-20s The old nickname of the cert to rename\n",
+        "   -n cert-name");
+    FPS "%-20s The new nickname of the cert to rename\n",
+        "   --new-n new-name");
+    FPS "%-20s Cert database directory (default is ~/.netscape)\n",
+        "   -d certdir");
+    FPS "%-20s Cert & Key database prefix\n",
+        "   -P dbprefix");
+    FPS "\n");
+}
+
+static void luUpgradeMerge(enum usage_level ul, const char *command)
+{
+    int is_my_command = (command && 0 == strcmp(command, "upgrade-merge"));
+    if (ul == usage_all || !command || is_my_command)
     FPS "%-15s Upgrade an old database and merge it into a new one\n",
-	"--upgrade-merge");
+        "--upgrade-merge");
+    if (ul == usage_selected && !is_my_command)
+        return;
     FPS "%-20s Cert database directory to merge into (default is ~/.netscape)\n",
-	"   -d certdir");
+        "   -d certdir");
     FPS "%-20s Cert & Key database prefix of the target database\n",
-	"   -P dbprefix");
+        "   -P dbprefix");
     FPS "%-20s Specify the password file for the target database\n",
-	"   -f pwfile");
+        "   -f pwfile");
     FPS "%-20s \n%-20s Cert database directory to upgrade from\n",
-	"   --source-dir certdir", "");
+        "   --source-dir certdir", "");
     FPS "%-20s \n%-20s Cert & Key database prefix of the upgrade database\n",
-	"   --soruce-prefix dbprefix", "");
+        "   --source-prefix dbprefix", "");
     FPS "%-20s \n%-20s Unique identifier for the upgrade database\n",
-	"   --upgrade-id uniqueID", "");
+        "   --upgrade-id uniqueID", "");
     FPS "%-20s \n%-20s Name of the token while it is in upgrade state\n",
-	"   --upgrade-token-name name", "");
+        "   --upgrade-token-name name", "");
     FPS "%-20s Specify the password file for the upgrade database\n",
-	"   -@ pwfile");
+        "   -@ pwfile");
     FPS "\n");
+}
 
+static void luMerge(enum usage_level ul, const char *command)
+{
+    int is_my_command = (command && 0 == strcmp(command, "merge"));
+    if (ul == usage_all || !command || is_my_command)
     FPS "%-15s Merge source database into the target database\n",
-	"--merge");
+        "--merge");
+    if (ul == usage_selected && !is_my_command)
+        return;
     FPS "%-20s Cert database directory of target (default is ~/.netscape)\n",
-	"   -d certdir");
+        "   -d certdir");
     FPS "%-20s Cert & Key database prefix of the target database\n",
-	"   -P dbprefix");
+        "   -P dbprefix");
     FPS "%-20s Specify the password file for the target database\n",
-	"   -f pwfile");
+        "   -f pwfile");
     FPS "%-20s \n%-20s Cert database directory of the source database\n",
-	"   --source-dir certdir", "");
+        "   --source-dir certdir", "");
     FPS "%-20s \n%-20s Cert & Key database prefix of the source database\n",
-	"   --source-prefix dbprefix", "");
+        "   --source-prefix dbprefix", "");
     FPS "%-20s Specify the password file for the source database\n",
-	"   -@ pwfile");
+        "   -@ pwfile");
     FPS "\n");
+}
 
+static void luS(enum usage_level ul, const char *command)
+{
+    int is_my_command = (command && 0 == strcmp(command, "S"));
+    if (ul == usage_all || !command || is_my_command)
     FPS "%-15s Make a certificate and add to database\n",
         "-S");
+    if (ul == usage_selected && !is_my_command)
+        return;
     FPS "%-20s Specify the nickname of the cert\n",
         "   -n key-name");
     FPS "%-20s Specify the subject name (using RFC1485)\n",
         "   -s subject");
     FPS "%-20s The nickname of the issuer cert\n",
-	"   -c issuer-name");
+        "   -c issuer-name");
     FPS "%-20s Set the certificate trust attributes (see -A above)\n",
-	"   -t trustargs");
-#ifdef NSS_ENABLE_ECC
+        "   -t trustargs");
+#ifndef NSS_DISABLE_ECC
     FPS "%-20s Type of key pair to generate (\"dsa\", \"ec\", \"rsa\" (default))\n",
 #else
     FPS "%-20s Type of key pair to generate (\"dsa\", \"rsa\" (default))\n",
-#endif /* NSS_ENABLE_ECC */
-	"   -k key-type-or-id");
+#endif /* NSS_DISABLE_ECC */
+        "   -k key-type-or-id");
     FPS "%-20s Name of token in which to generate key (default is internal)\n",
-	"   -h token-name");
+        "   -h token-name");
     FPS "%-20s Key size in bits, RSA keys only (min %d, max %d, default %d)\n",
-	"   -g key-size", MIN_KEY_BITS, MAX_KEY_BITS, DEFAULT_KEY_BITS);
+        "   -g key-size", MIN_KEY_BITS, MAX_KEY_BITS, DEFAULT_KEY_BITS);
     FPS "%-20s Name of file containing PQG parameters (dsa only)\n",
-	"   -q pqgfile");
-#ifdef NSS_ENABLE_ECC
+        "   -q pqgfile");
+#ifndef NSS_DISABLE_ECC
     FPS "%-20s Elliptic curve name (ec only)\n",
-	"   -q curve-name");
+        "   -q curve-name");
     FPS "%-20s See the \"-G\" option for a full list of supported names.\n",
-	"");
-#endif /* NSS_ENABLE_ECC */
+        "");
+#endif /* NSS_DISABLE_ECC */
     FPS "%-20s Self sign\n",
-	"   -x");
+        "   -x");
     FPS "%-20s Cert serial number\n",
-	"   -m serial-number");
+        "   -m serial-number");
     FPS "%-20s Time Warp\n",
-	"   -w warp-months");
+        "   -w warp-months");
     FPS "%-20s Months valid (default is 3)\n",
         "   -v months-valid");
     FPS "%-20s Specify the password file\n",
-	"   -f pwfile");
+        "   -f pwfile");
     FPS "%-20s Cert database directory (default is ~/.netscape)\n",
-	"   -d certdir");
+        "   -d certdir");
     FPS "%-20s Cert & Key database prefix\n",
-	"   -P dbprefix");
+        "   -P dbprefix");
     FPS "%-20s Specify the contact phone number (\"123-456-7890\")\n",
-	"   -p phone");
+        "   -p phone");
+    FPS "%-20s \n"
+              "%-20s Specify the hash algorithm to use. Possible keywords:\n"
+              "%-20s \"MD2\", \"MD4\", \"MD5\", \"SHA1\", \"SHA224\",\n"
+              "%-20s \"SHA256\", \"SHA384\", \"SHA512\"\n",
+        "   -Z hashAlg", "", "", "");
     FPS "%-20s Create key usage extension\n",
-	"   -1 ");
+        "   -1 ");
     FPS "%-20s Create basic constraint extension\n",
-	"   -2 ");
+        "   -2 ");
     FPS "%-20s Create authority key ID extension\n",
-	"   -3 ");
+        "   -3 ");
     FPS "%-20s Create crl distribution point extension\n",
-	"   -4 ");
+        "   -4 ");
     FPS "%-20s Create netscape cert type extension\n",
-	"   -5 ");
+        "   -5 ");
     FPS "%-20s Create extended key usage extension\n",
-	"   -6 ");
+        "   -6 ");
     FPS "%-20s Create an email subject alt name extension\n",
-	"   -7 emailAddrs ");
+        "   -7 emailAddrs ");
     FPS "%-20s Create a DNS subject alt name extension\n",
-	"   -8 DNS-names");
+        "   -8 DNS-names");
     FPS "%-20s Create an Authority Information Access extension\n",
-	"   --extAIA ");
+        "   --extAIA ");
     FPS "%-20s Create a Subject Information Access extension\n",
-	"   --extSIA ");
+        "   --extSIA ");
     FPS "%-20s Create a Certificate Policies extension\n",
-	"   --extCP ");
+        "   --extCP ");
     FPS "%-20s Create a Policy Mappings extension\n",
-	"   --extPM ");
+        "   --extPM ");
     FPS "%-20s Create a Policy Constraints extension\n",
-	"   --extPC ");
+        "   --extPC ");
     FPS "%-20s Create an Inhibit Any Policy extension\n",
-	"   --extIA ");
+        "   --extIA ");
     FPS "%-20s Create a subject key ID extension\n",
-	"   --extSKID ");
+        "   --extSKID ");
+    FPS "%-20s \n",
+        "   See -G for available key flag options");
+    FPS "%-20s Create a name constraints extension\n",
+        "   --extNC ");
+    FPS "%-20s \n"
+        "%-20s Create a Subject Alt Name extension with one or multiple names\n",
+	"   --extSAN type:name[,type:name]...", "");
+    FPS "%-20s - type: directory, dn, dns, edi, ediparty, email, ip, ipaddr,\n", "");
+    FPS "%-20s         other, registerid, rfc822, uri, x400, x400addr\n", "");
+    FPS "%-20s \n"
+        "%-20s Add one or multiple extensions that certutil cannot encode yet,\n"
+	"%-20s by loading their encodings from external files.\n",
+        "   --extGeneric OID:critical-flag:filename[,OID:critical-flag:filename]...", "", "");
+    FPS "%-20s - OID (example): 1.2.3.4\n", "");
+    FPS "%-20s - critical-flag: critical or not-critical\n", "");
+    FPS "%-20s - filename: full path to a file containing an encoded extension\n", "");
     FPS "\n");
+}
 
-    exit(1);
+static void LongUsage(char *progName, enum usage_level ul, const char *command)
+{
+    luA(ul, command);
+    luB(ul, command);
+    luE(ul, command);
+    luC(ul, command);
+    luG(ul, command);
+    luD(ul, command);
+    luRename(ul, command);
+    luF(ul, command);
+    luU(ul, command);
+    luK(ul, command);
+    luL(ul, command);
+    luM(ul, command);
+    luN(ul, command);
+    luT(ul, command);
+    luO(ul, command);
+    luR(ul, command);
+    luV(ul, command);
+    luW(ul, command);
+    luUpgradeMerge(ul, command);
+    luMerge(ul, command);
+    luS(ul, command);
 #undef FPS
 }
 
+static void
+Usage(char *progName)
+{
+    PR_fprintf(PR_STDERR,
+        "%s - Utility to manipulate NSS certificate databases\n\n"
+        "Usage:  %s <command> -d <database-directory> <options>\n\n"
+        "Valid commands:\n", progName, progName);
+    LongUsage(progName, usage_selected, NULL);
+    PR_fprintf(PR_STDERR, "\n"
+        "%s -H <command> : Print available options for the given command\n"
+        "%s -H : Print complete help output of all commands and options\n"
+        "%s --syntax : Print a short summary of all commands and options\n",
+        progName, progName, progName);
+    exit(1);
+}
 
 static CERTCertificate *
 MakeV1Cert(	CERTCertDBHandle *	handle, 
@@ -1508,16 +1839,16 @@ MakeV1Cert(	CERTCertDBHandle *	handle,
     return(cert);
 }
 
-static SECItem *
+static SECStatus
 SignCert(CERTCertDBHandle *handle, CERTCertificate *cert, PRBool selfsign, 
          SECOidTag hashAlgTag,
-         SECKEYPrivateKey *privKey, char *issuerNickName, void *pwarg)
+         SECKEYPrivateKey *privKey, char *issuerNickName,
+         int certVersion, void *pwarg)
 {
     SECItem der;
-    SECItem *result = NULL;
     SECKEYPrivateKey *caPrivateKey = NULL;    
     SECStatus rv;
-    PRArenaPool *arena;
+    PLArenaPool *arena;
     SECOidTag algID;
     void *dummy;
 
@@ -1526,14 +1857,14 @@ SignCert(CERTCertDBHandle *handle, CERTCertificate *cert, PRBool selfsign,
       if( (CERTCertificate *)NULL == issuer ) {
         SECU_PrintError(progName, "unable to find issuer with nickname %s", 
 	                issuerNickName);
-        return (SECItem *)NULL;
+        return SECFailure;
       }
 
       privKey = caPrivateKey = PK11_FindKeyByAnyCert(issuer, pwarg);
       CERT_DestroyCertificate(issuer);
       if (caPrivateKey == NULL) {
 	SECU_PrintError(progName, "unable to retrieve key %s", issuerNickName);
-	return NULL;
+	return SECFailure;
       }
     }
 	
@@ -1542,6 +1873,7 @@ SignCert(CERTCertDBHandle *handle, CERTCertificate *cert, PRBool selfsign,
     algID = SEC_GetSignatureAlgorithmOidTag(privKey->keyType, hashAlgTag);
     if (algID == SEC_OID_UNKNOWN) {
 	fprintf(stderr, "Unknown key or hash type for issuer.");
+	rv = SECFailure;
 	goto done;
     }
 
@@ -1551,9 +1883,23 @@ SignCert(CERTCertDBHandle *handle, CERTCertificate *cert, PRBool selfsign,
 	goto done;
     }
 
-    /* we only deal with cert v3 here */
-    *(cert->version.data) = 2;
-    cert->version.len = 1;
+    switch(certVersion) {
+      case (SEC_CERTIFICATE_VERSION_1):
+        /* The initial version for x509 certificates is version one
+         * and this default value must be an implicit DER encoding. */
+        cert->version.data = NULL;
+        cert->version.len = 0;
+        break;
+      case (SEC_CERTIFICATE_VERSION_2):
+      case (SEC_CERTIFICATE_VERSION_3):
+      case 3: /* unspecified format (would be version 4 certificate). */
+        *(cert->version.data) = certVersion;
+        cert->version.len = 1;
+        break;
+      default:
+        PORT_SetError(SEC_ERROR_INVALID_ARGS);
+        return SECFailure;
+    }
 
     der.len = 0;
     der.data = NULL;
@@ -1561,29 +1907,22 @@ SignCert(CERTCertDBHandle *handle, CERTCertificate *cert, PRBool selfsign,
 			 	SEC_ASN1_GET(CERT_CertificateTemplate));
     if (!dummy) {
 	fprintf (stderr, "Could not encode certificate.\n");
+	rv = SECFailure;
 	goto done;
     }
 
-    result = (SECItem *) PORT_ArenaZAlloc (arena, sizeof (SECItem));
-    if (result == NULL) {
-	fprintf (stderr, "Could not allocate item for certificate data.\n");
-	goto done;
-    }
-
-    rv = SEC_DerSignData(arena, result, der.data, der.len, privKey, algID);
+    rv = SEC_DerSignData(arena, &cert->derCert, der.data, der.len, privKey, algID);
     if (rv != SECSuccess) {
 	fprintf (stderr, "Could not sign encoded certificate data.\n");
 	/* result allocated out of the arena, it will be freed
 	 * when the arena is freed */
-	result = NULL;
 	goto done;
     }
-    cert->derCert = *result;
 done:
     if (caPrivateKey) {
 	SECKEY_DestroyPrivateKey(caPrivateKey);
     }
-    return result;
+    return rv;
 }
 
 static SECStatus
@@ -1591,8 +1930,7 @@ CreateCert(
 	CERTCertDBHandle *handle, 
 	PK11SlotInfo *slot,
 	char *  issuerNickName, 
-	PRFileDesc *inFile,
-	PRFileDesc *outFile, 
+	const SECItem * certReqDER,
 	SECKEYPrivateKey **selfsignprivkey,
 	void 	*pwarg,
 	SECOidTag hashAlgTag,
@@ -1601,22 +1939,22 @@ CreateCert(
 	int     validityMonths,
 	const char *emailAddrs,
 	const char *dnsNames,
-	PRBool  ascii,
+	PRBool ascii,
 	PRBool  selfsign,
-	certutilExtnList extnList)
+	certutilExtnList extnList,
+	const char *extGeneric,
+        int certVersion,
+	SECItem * certDER)
 {
     void *	extHandle;
-    SECItem *	certDER;
     CERTCertificate *subjectCert 	= NULL;
     CERTCertificateRequest *certReq	= NULL;
     SECStatus 	rv 			= SECSuccess;
-    SECItem 	reqDER;
     CERTCertExtension **CRexts;
 
-    reqDER.data = NULL;
     do {
 	/* Create a certrequest object from the input cert request der */
-	certReq = GetCertRequest(inFile, ascii);
+	certReq = GetCertRequest(certReqDER);
 	if (certReq == NULL) {
 	    GEN_BREAK (SECFailure)
 	}
@@ -1633,7 +1971,7 @@ CreateCert(
 	    GEN_BREAK (SECFailure)
 	}
         
-        rv = AddExtensions(extHandle, emailAddrs, dnsNames, extnList);
+        rv = AddExtensions(extHandle, emailAddrs, dnsNames, extnList, extGeneric);
         if (rv != SECSuccess) {
 	    GEN_BREAK (SECFailure)
 	}
@@ -1664,19 +2002,34 @@ CreateCert(
 	    }
 	}
 
-	certDER = SignCert(handle, subjectCert, selfsign, hashAlgTag,
-	                   *selfsignprivkey, issuerNickName,pwarg);
+	rv = SignCert(handle, subjectCert, selfsign, hashAlgTag,
+		      *selfsignprivkey, issuerNickName,
+                      certVersion, pwarg);
+	if (rv != SECSuccess)
+	    break;
 
-	if (certDER) {
-	   if (ascii) {
-		PR_fprintf(outFile, "%s\n%s\n%s\n", NS_CERT_HEADER, 
-		           BTOA_DataToAscii(certDER->data, certDER->len), 
-			   NS_CERT_TRAILER);
-	   } else {
-		PR_Write(outFile, certDER->data, certDER->len);
-	   }
+	rv = SECFailure;
+	if (ascii) {
+	    char * asciiDER = BTOA_DataToAscii(subjectCert->derCert.data,
+					       subjectCert->derCert.len);
+	    if (asciiDER) {
+	        char * wrapped = PR_smprintf("%s\n%s\n%s\n",
+					     NS_CERT_HEADER,
+					     asciiDER,
+					     NS_CERT_TRAILER);
+	        if (wrapped) {
+		    PRUint32 wrappedLen = PL_strlen(wrapped);
+		    if (SECITEM_AllocItem(NULL, certDER, wrappedLen)) {
+		        PORT_Memcpy(certDER->data, wrapped, wrappedLen);
+		        rv = SECSuccess;
+		    }
+		    PR_smprintf_free(wrapped);
+	        }
+		PORT_Free(asciiDER);
+	    }
+	} else {
+	    rv = SECITEM_CopyItem(NULL, certDER, &subjectCert->derCert);
 	}
-
     } while (0);
     CERT_DestroyCertificateRequest (certReq);
     CERT_DestroyCertificate (subjectCert);
@@ -1725,6 +2078,101 @@ getObjectClass(CK_ULONG classType)
     }
     sprintf(buf, "0x%lx", classType);
     return buf;
+}
+
+typedef struct {
+    char *name;
+    int  nameSize;
+    CK_ULONG value;
+} flagArray;
+
+#define NAME_SIZE(x) #x,sizeof(#x)-1
+
+flagArray opFlagsArray[] =
+{
+    {NAME_SIZE(encrypt), CKF_ENCRYPT},
+    {NAME_SIZE(decrypt), CKF_DECRYPT},
+    {NAME_SIZE(sign), CKF_SIGN},
+    {NAME_SIZE(sign_recover), CKF_SIGN_RECOVER},
+    {NAME_SIZE(verify), CKF_VERIFY},
+    {NAME_SIZE(verify_recover), CKF_VERIFY_RECOVER},
+    {NAME_SIZE(wrap), CKF_WRAP},
+    {NAME_SIZE(unwrap), CKF_UNWRAP},
+    {NAME_SIZE(derive), CKF_DERIVE},
+};
+
+int opFlagsCount = sizeof(opFlagsArray)/sizeof(flagArray);
+
+flagArray attrFlagsArray[] =
+{
+    {NAME_SIZE(token), PK11_ATTR_TOKEN},
+    {NAME_SIZE(session), PK11_ATTR_SESSION},
+    {NAME_SIZE(private), PK11_ATTR_PRIVATE},
+    {NAME_SIZE(public), PK11_ATTR_PUBLIC},
+    {NAME_SIZE(modifiable), PK11_ATTR_MODIFIABLE},
+    {NAME_SIZE(unmodifiable), PK11_ATTR_UNMODIFIABLE},
+    {NAME_SIZE(sensitive), PK11_ATTR_SENSITIVE},
+    {NAME_SIZE(insensitive), PK11_ATTR_INSENSITIVE},
+    {NAME_SIZE(extractable), PK11_ATTR_EXTRACTABLE},
+    {NAME_SIZE(unextractable), PK11_ATTR_UNEXTRACTABLE}
+
+};
+
+int attrFlagsCount = sizeof(attrFlagsArray)/sizeof(flagArray);
+
+#define MAX_STRING 30
+CK_ULONG
+GetFlags(char *flagsString, flagArray *flagArray, int count)
+{
+   CK_ULONG flagsValue = strtol(flagsString, NULL, 0);
+   int i;
+
+   if ((flagsValue != 0) || (*flagsString == 0)) {
+	return flagsValue;
+   }
+   while (*flagsString) {
+	for (i=0; i < count; i++) {
+	    if (strncmp(flagsString, flagArray[i].name, flagArray[i].nameSize) 
+								== 0) {
+		flagsValue |= flagArray[i].value;
+		flagsString += flagArray[i].nameSize;
+		if (*flagsString != 0) {
+		    flagsString++;
+		}
+		break;
+	    }
+	}
+	if (i == count) {
+	    char name[MAX_STRING];
+	    char *tok;
+
+	    strncpy(name,flagsString, MAX_STRING);
+	    name[MAX_STRING-1] = 0;
+	    tok = strchr(name, ',');
+	    if (tok) {
+		*tok = 0;
+	    }
+	    fprintf(stderr,"Unknown flag (%s)\n",name);
+	    tok = strchr(flagsString, ',');
+	    if (tok == NULL)  {
+		break;
+	    }
+	    flagsString = tok+1;
+	}
+    }
+    return flagsValue;
+}
+
+CK_FLAGS
+GetOpFlags(char *flags)
+{
+    return GetFlags(flags, opFlagsArray, opFlagsCount);
+}
+
+PK11AttrFlags
+GetAttrFlags(char *flags)
+{
+    return GetFlags(flags, attrFlagsArray, attrFlagsCount);
 }
 
 char *mkNickname(unsigned char *data, int len)
@@ -1790,6 +2238,7 @@ enum {
     cmd_DeleteKey,
     cmd_GenKeyPair,
     cmd_PrintHelp,
+    cmd_PrintSyntax,
     cmd_ListKeys,
     cmd_ListCerts,
     cmd_ModifyCertTrust,
@@ -1804,7 +2253,9 @@ enum {
     cmd_Version,
     cmd_Batch,
     cmd_Merge,
-    cmd_UpgradeMerge /* test only */
+    cmd_UpgradeMerge, /* test only */
+    cmd_Rename,
+    max_cmd
 };
 
 /*  Certutil options */
@@ -1827,6 +2278,7 @@ enum certutilOpts {
     opt_KeySize,
     opt_TokenName,
     opt_InputFile,
+    opt_Emailaddress,
     opt_KeyIndex,
     opt_KeyType,
     opt_DetailedInfo,
@@ -1854,6 +2306,7 @@ enum certutilOpts {
     opt_AddPolicyMapExt,
     opt_AddPolicyConstrExt,
     opt_AddInhibAnyExt,
+    opt_AddNameConstraintsExt,
     opt_AddSubjectKeyIDExt,
     opt_AddCmdKeyUsageExt,
     opt_AddCmdNSCertTypeExt,
@@ -1861,7 +2314,17 @@ enum certutilOpts {
     opt_SourceDir,
     opt_SourcePrefix,
     opt_UpgradeID,
-    opt_UpgradeTokenName
+    opt_UpgradeTokenName,
+    opt_KeyOpFlagsOn,
+    opt_KeyOpFlagsOff,
+    opt_KeyAttrFlags,
+    opt_EmptyPassword,
+    opt_CertVersion,
+    opt_AddSubjectAltNameExt,
+    opt_DumpExtensionValue,
+    opt_GenericExtensions,
+    opt_NewNickname,
+    opt_Help
 };
 
 static const
@@ -1873,7 +2336,9 @@ secuCommandFlag commands_init[] =
 	{ /* cmd_AddEmailCert        */  'E', PR_FALSE, 0, PR_FALSE },
 	{ /* cmd_DeleteKey           */  'F', PR_FALSE, 0, PR_FALSE },
 	{ /* cmd_GenKeyPair          */  'G', PR_FALSE, 0, PR_FALSE },
-	{ /* cmd_PrintHelp           */  'H', PR_FALSE, 0, PR_FALSE },
+	{ /* cmd_PrintHelp           */  'H', PR_FALSE, 0, PR_FALSE, "help" },
+        { /* cmd_PrintSyntax         */   0,  PR_FALSE, 0, PR_FALSE,
+                                                   "syntax" },
 	{ /* cmd_ListKeys            */  'K', PR_FALSE, 0, PR_FALSE },
 	{ /* cmd_ListCerts           */  'L', PR_FALSE, 0, PR_FALSE },
 	{ /* cmd_ModifyCertTrust     */  'M', PR_FALSE, 0, PR_FALSE },
@@ -1889,7 +2354,9 @@ secuCommandFlag commands_init[] =
 	{ /* cmd_Batch               */  'B', PR_FALSE, 0, PR_FALSE },
 	{ /* cmd_Merge               */   0,  PR_FALSE, 0, PR_FALSE, "merge" },
 	{ /* cmd_UpgradeMerge        */   0,  PR_FALSE, 0, PR_FALSE, 
-                                                   "upgrade-merge" }
+                                                   "upgrade-merge" },
+	{ /* cmd_Rename              */   0,  PR_FALSE, 0, PR_FALSE, 
+                                                   "rename" }
 };
 #define NUM_COMMANDS ((sizeof commands_init) / (sizeof commands_init[0]))
  
@@ -1914,6 +2381,7 @@ secuCommandFlag options_init[] =
 	{ /* opt_KeySize             */  'g', PR_TRUE,  0, PR_FALSE },
 	{ /* opt_TokenName           */  'h', PR_TRUE,  0, PR_FALSE },
 	{ /* opt_InputFile           */  'i', PR_TRUE,  0, PR_FALSE },
+	{ /* opt_Emailaddress        */  0,   PR_TRUE,  0, PR_FALSE, "email" },
 	{ /* opt_KeyIndex            */  'j', PR_TRUE,  0, PR_FALSE },
 	{ /* opt_KeyType             */  'k', PR_TRUE,  0, PR_FALSE },
 	{ /* opt_DetailedInfo        */  'l', PR_FALSE, 0, PR_FALSE },
@@ -1941,6 +2409,7 @@ secuCommandFlag options_init[] =
 	{ /* opt_AddPolicyMapExt     */  0,   PR_FALSE, 0, PR_FALSE, "extPM" },
 	{ /* opt_AddPolicyConstrExt  */  0,   PR_FALSE, 0, PR_FALSE, "extPC" },
 	{ /* opt_AddInhibAnyExt      */  0,   PR_FALSE, 0, PR_FALSE, "extIA" },
+	{ /* opt_AddNameConstraintsExt*/ 0,   PR_FALSE, 0, PR_FALSE, "extNC" },
 	{ /* opt_AddSubjectKeyIDExt  */  0,   PR_FALSE, 0, PR_FALSE, 
 						   "extSKID" },
 	{ /* opt_AddCmdKeyUsageExt   */  0,   PR_TRUE,  0, PR_FALSE,
@@ -1958,6 +2427,23 @@ secuCommandFlag options_init[] =
                                                    "upgrade-id"},
 	{ /* opt_UpgradeTokenName    */  0,   PR_TRUE,  0, PR_FALSE, 
                                                    "upgrade-token-name"},
+	{ /* opt_KeyOpFlagsOn        */  0,   PR_TRUE, 0, PR_FALSE, 
+                                                   "keyOpFlagsOn"},
+	{ /* opt_KeyOpFlagsOff       */  0,   PR_TRUE, 0, PR_FALSE, 
+                                                   "keyOpFlagsOff"},
+	{ /* opt_KeyAttrFlags        */  0,   PR_TRUE, 0, PR_FALSE, 
+                                                   "keyAttrFlags"},
+	{ /* opt_EmptyPassword       */  0,   PR_FALSE, 0, PR_FALSE, 
+                                                   "empty-password"},
+        { /* opt_CertVersion         */  0,   PR_TRUE, 0, PR_FALSE,
+                                                   "certVersion"},
+	{ /* opt_AddSubjectAltExt    */  0,   PR_TRUE,  0, PR_FALSE, "extSAN"},
+	{ /* opt_DumpExtensionValue  */  0,   PR_TRUE, 0, PR_FALSE, 
+                                                   "dump-ext-val"},
+	{ /* opt_GenericExtensions   */  0,   PR_TRUE, 0, PR_FALSE, 
+                                                   "extGeneric"},
+	{ /* opt_NewNickname         */  0,   PR_TRUE, 0, PR_FALSE, 
+                                                   "new-n"},
 };
 #define NUM_OPTIONS ((sizeof options_init)  / (sizeof options_init[0]))
 
@@ -1980,21 +2466,24 @@ certutil_main(int argc, char **argv, PRBool initialize)
     PK11SlotInfo *slot = NULL;
     CERTName *  subject         = 0;
     PRFileDesc *inFile          = PR_STDIN;
-    PRFileDesc *outFile         = NULL;
-    char *      certfile        = "tempcert";
-    char *      certreqfile     = "tempcertreq";
-    char *      slotname        = "internal";
-    char *      certPrefix      = "";
+    PRFileDesc *outFile         = PR_STDOUT;
+    SECItem     certReqDER      = { siBuffer, NULL, 0 };
+    SECItem     certDER         = { siBuffer, NULL, 0 };
+    const char *slotname        = "internal";
+    const char *certPrefix      = "";
     char *      sourceDir       = "";
-    char *      srcCertPrefix   = "";
+    const char *srcCertPrefix   = "";
     char *      upgradeID        = "";
     char *      upgradeTokenName     = "";
     KeyType     keytype         = rsaKey;
     char *      name            = NULL;
+    char *      newName         = NULL;
+    char *      email            = NULL;
     char *      keysource       = NULL;
     SECOidTag   hashAlgTag      = SEC_OID_UNKNOWN;
     int	        keysize	        = DEFAULT_KEY_BITS;
     int         publicExponent  = 0x010001;
+    int         certVersion     = SEC_CERTIFICATE_VERSION_3;
     unsigned int serialNumber   = 0;
     int         warpmonths      = 0;
     int         validityMonths  = 3;
@@ -2004,6 +2493,10 @@ certutil_main(int argc, char **argv, PRBool initialize)
     secuPWData  pwdata2         = { PW_NONE, 0 };
     PRBool      readOnly        = PR_FALSE;
     PRBool      initialized     = PR_FALSE;
+    CK_FLAGS    keyOpFlagsOn = 0;
+    CK_FLAGS    keyOpFlagsOff = 0;
+    PK11AttrFlags    keyAttrFlags = 
+		PK11_ATTR_TOKEN | PK11_ATTR_SENSITIVE | PK11_ATTR_PRIVATE;
 
     SECKEYPrivateKey *privkey = NULL;
     SECKEYPublicKey *pubkey = NULL;
@@ -2021,8 +2514,32 @@ certutil_main(int argc, char **argv, PRBool initialize)
     if (rv != SECSuccess)
 	Usage(progName);
 
-    if (certutil.commands[cmd_PrintHelp].activated)
-	LongUsage(progName);
+    if (certutil.commands[cmd_PrintSyntax].activated) {
+        PrintSyntax(progName);
+    }
+
+    if (certutil.commands[cmd_PrintHelp].activated) {
+        int i;
+        char buf[2];
+        const char *command = NULL;
+        for (i = 0; i < max_cmd; i++) {
+            if (i == cmd_PrintHelp)
+                continue;
+            if (certutil.commands[i].activated) {
+                if (certutil.commands[i].flag) {
+                    buf[0] = certutil.commands[i].flag;
+                    buf[1] = 0;
+                    command = buf;
+                }
+                else {
+                    command = certutil.commands[i].longform;
+                }
+                break;
+            }
+        }
+	LongUsage(progName, (command ? usage_selected : usage_all), command);
+        exit(1);
+    }
 
     if (certutil.options[opt_PasswordFile].arg) {
 	pwdata.source = PW_FROMFILE;
@@ -2053,12 +2570,12 @@ certutil_main(int argc, char **argv, PRBool initialize)
 		       progName, MIN_KEY_BITS, MAX_KEY_BITS);
 	    return 255;
 	}
-#ifdef NSS_ENABLE_ECC
+#ifndef NSS_DISABLE_ECC
 	if (keytype == ecKey) {
 	    PR_fprintf(PR_STDERR, "%s -g:  Not for ec keys.\n", progName);
 	    return 255;
 	}
-#endif /* NSS_ENABLE_ECC */
+#endif /* NSS_DISABLE_ECC */
 
     }
 
@@ -2067,7 +2584,7 @@ certutil_main(int argc, char **argv, PRBool initialize)
 	if (PL_strcmp(certutil.options[opt_TokenName].arg, "all") == 0)
 	    slotname = NULL;
 	else
-	    slotname = PL_strdup(certutil.options[opt_TokenName].arg);
+	    slotname = certutil.options[opt_TokenName].arg;
     }
 
     /*  -Z hash type  */
@@ -2088,10 +2605,10 @@ certutil_main(int argc, char **argv, PRBool initialize)
 	    keytype = rsaKey;
 	} else if (PL_strcmp(arg, "dsa") == 0) {
 	    keytype = dsaKey;
-#ifdef NSS_ENABLE_ECC
+#ifndef NSS_DISABLE_ECC
 	} else if (PL_strcmp(arg, "ec") == 0) {
 	    keytype = ecKey;
-#endif /* NSS_ENABLE_ECC */
+#endif /* NSS_DISABLE_ECC */
 	} else if (PL_strcmp(arg, "all") == 0) {
 	    keytype = nullKey;
 	} else {
@@ -2100,6 +2617,17 @@ certutil_main(int argc, char **argv, PRBool initialize)
 	}
     } else if (certutil.commands[cmd_ListKeys].activated) {
 	keytype = nullKey;
+    }
+
+    if (certutil.options[opt_KeyOpFlagsOn].activated) {
+	keyOpFlagsOn = GetOpFlags(certutil.options[opt_KeyOpFlagsOn].arg);
+    }
+    if (certutil.options[opt_KeyOpFlagsOff].activated) {
+	keyOpFlagsOff = GetOpFlags(certutil.options[opt_KeyOpFlagsOff].arg);
+	keyOpFlagsOn &=~keyOpFlagsOff; /* make off override on */
+    }
+    if (certutil.options[opt_KeyAttrFlags].activated) {
+	keyAttrFlags = GetAttrFlags(certutil.options[opt_KeyAttrFlags].arg);
     }
 
     /*  -m serial number */
@@ -2116,7 +2644,7 @@ certutil_main(int argc, char **argv, PRBool initialize)
     /*  -P certdb name prefix */
     if (certutil.options[opt_DBPrefix].activated) {
         if (certutil.options[opt_DBPrefix].arg) {
-            certPrefix = strdup(certutil.options[opt_DBPrefix].arg);
+            certPrefix = certutil.options[opt_DBPrefix].arg;
         } else {
             Usage(progName);
         }
@@ -2125,7 +2653,7 @@ certutil_main(int argc, char **argv, PRBool initialize)
     /*  --source-prefix certdb name prefix */
     if (certutil.options[opt_SourcePrefix].activated) {
         if (certutil.options[opt_SourcePrefix].arg) {
-            srcCertPrefix = strdup(certutil.options[opt_SourcePrefix].arg);
+            srcCertPrefix = certutil.options[opt_SourcePrefix].arg;
         } else {
             Usage(progName);
         }
@@ -2133,7 +2661,7 @@ certutil_main(int argc, char **argv, PRBool initialize)
 
     /*  -q PQG file or curve name */
     if (certutil.options[opt_PQGFile].activated) {
-#ifdef NSS_ENABLE_ECC
+#ifndef NSS_DISABLE_ECC
 	if ((keytype != dsaKey) && (keytype != ecKey)) {
 	    PR_fprintf(PR_STDERR, "%s -q: specifies a PQG file for DSA keys" \
 		       " (-k dsa) or a named curve for EC keys (-k ec)\n)",
@@ -2142,7 +2670,7 @@ certutil_main(int argc, char **argv, PRBool initialize)
 	if (keytype != dsaKey) {
 	    PR_fprintf(PR_STDERR, "%s -q: PQG file is for DSA key (-k dsa).\n)",
 	               progName);
-#endif /* NSS_ENABLE_ECC */
+#endif /* NSS_DISABLE_ECC */
 	    return 255;
 	}
     }
@@ -2184,6 +2712,19 @@ certutil_main(int argc, char **argv, PRBool initialize)
 	}
     }
 
+    /*  --certVersion */
+    if (certutil.options[opt_CertVersion].activated) {
+        certVersion = PORT_Atoi(certutil.options[opt_CertVersion].arg);
+        if (certVersion < 1 || certVersion > 4) {
+            PR_fprintf(PR_STDERR, "%s -certVersion: incorrect certificate version %d.",
+                                   progName, certVersion);
+            PR_fprintf(PR_STDERR, "Must be 1, 2, 3 or 4.\n");
+            return 255;
+        }
+        certVersion = certVersion - 1;
+    }
+
+
     /*  Check number of commands entered.  */
     commandsEntered = 0;
     for (i=0; i< certutil.numCommands; i++) {
@@ -2205,7 +2746,6 @@ certutil_main(int argc, char **argv, PRBool initialize)
 	return 255;
     }
     if (commandsEntered == 0) {
-	PR_fprintf(PR_STDERR, "%s: you must enter a command!\n", progName);
 	Usage(progName);
     }
 
@@ -2245,9 +2785,10 @@ certutil_main(int argc, char **argv, PRBool initialize)
 	return 255;
     }
 
-    /*  if -L is given raw or ascii mode, it must be for only one cert.  */
+    /*  if -L is given raw, ascii or dump mode, it must be for only one cert. */
     if (certutil.commands[cmd_ListCerts].activated &&
         (certutil.options[opt_ASCIIForIO].activated ||
+         certutil.options[opt_DumpExtensionValue].activated ||
          certutil.options[opt_BinaryDER].activated) &&
         !certutil.options[opt_Nickname].activated) {
 	PR_fprintf(PR_STDERR, 
@@ -2294,6 +2835,19 @@ certutil_main(int argc, char **argv, PRBool initialize)
 	           progName);
 	return 255;
     }
+
+    /* Rename needs an old and a new nickname */
+    if (certutil.commands[cmd_Rename].activated &&
+        !(certutil.options[opt_Nickname].activated &&
+          certutil.options[opt_NewNickname].activated)) {
+
+	PR_fprintf(PR_STDERR, 
+	           "%s --rename: specify an old nickname (-n) and\n"
+                   "   a new nickname (--new-n).\n",
+	           progName);
+	return 255;
+    }
+
 
     /* Upgrade/Merge needs a source database and a upgrade id. */
     if (certutil.commands[cmd_UpgradeMerge].activated &&
@@ -2350,19 +2904,6 @@ certutil_main(int argc, char **argv, PRBool initialize)
 	return 255;
     }
 
-    /*  -S  open outFile, temporary file for cert request.  */
-    if (certutil.commands[cmd_CreateAndAddCert].activated) {
-	outFile = PR_Open(certreqfile,
-                          PR_RDWR | PR_CREATE_FILE | PR_TRUNCATE, 00660);
-	if (!outFile) {
-	    PR_fprintf(PR_STDERR, 
-		       "%s -o: unable to open \"%s\" for writing (%ld, %ld)\n",
-		       progName, certreqfile,
-		       PR_GetError(), PR_GetOSError());
-	    return 255;
-	}
-    }
-
     /*  Open the input file.  */
     if (certutil.options[opt_InputFile].activated) {
 	inFile = PR_Open(certutil.options[opt_InputFile].arg, PR_RDONLY, 0);
@@ -2376,7 +2917,7 @@ certutil_main(int argc, char **argv, PRBool initialize)
     }
 
     /*  Open the output file.  */
-    if (certutil.options[opt_OutputFile].activated && !outFile) {
+    if (certutil.options[opt_OutputFile].activated) {
 	outFile = PR_Open(certutil.options[opt_OutputFile].arg, 
                           PR_CREATE_FILE | PR_RDWR | PR_TRUNCATE, 00660);
 	if (!outFile) {
@@ -2389,6 +2930,8 @@ certutil_main(int argc, char **argv, PRBool initialize)
     }
 
     name = SECU_GetOptionArg(&certutil, opt_Nickname);
+    newName = SECU_GetOptionArg(&certutil, opt_NewNickname);
+    email = SECU_GetOptionArg(&certutil, opt_Emailaddress);
 
     PK11_SetPasswordFunc(SECU_GetModulePassword);
 
@@ -2425,9 +2968,6 @@ certutil_main(int argc, char **argv, PRBool initialize)
     else if (slotname != NULL)
 	slot = PK11_FindSlotByName(slotname);
 
-    
-
-   
     if ( !slot && (certutil.commands[cmd_NewDBs].activated ||
          certutil.commands[cmd_ModifyCertTrust].activated  || 
          certutil.commands[cmd_ChangePassword].activated   ||
@@ -2445,7 +2985,10 @@ certutil_main(int argc, char **argv, PRBool initialize)
 
     /*  If creating new database, initialize the password.  */
     if (certutil.commands[cmd_NewDBs].activated) {
-	SECU_ChangePW2(slot, 0, 0, certutil.options[opt_PasswordFile].arg,
+	if(certutil.options[opt_EmptyPassword].activated && (PK11_NeedUserInit(slot)))
+	    PK11_InitPin(slot, (char*)NULL, "");
+	else
+	    SECU_ChangePW2(slot, 0, 0, certutil.options[opt_PasswordFile].arg,
 				certutil.options[opt_NewPasswordFile].arg);
     }
 
@@ -2579,10 +3122,29 @@ merge_fail:
 
     /*  List certs (-L)  */
     if (certutil.commands[cmd_ListCerts].activated) {
-	rv = ListCerts(certHandle, name, slot,
-	               certutil.options[opt_BinaryDER].activated,
-	               certutil.options[opt_ASCIIForIO].activated, 
-                       (outFile) ? outFile : PR_STDOUT, &pwdata);
+	if (certutil.options[opt_DumpExtensionValue].activated) {
+	    const char *oid_str;
+	    SECItem oid_item;
+            SECStatus srv;
+	    oid_item.data = NULL;
+	    oid_item.len = 0;
+	    oid_str = certutil.options[opt_DumpExtensionValue].arg;
+	    srv = GetOidFromString(NULL, &oid_item, oid_str, strlen(oid_str));
+	    if (srv != SECSuccess) {
+         	SECU_PrintError(progName, "malformed extension OID %s",
+				oid_str);
+		goto shutdown;
+	    }
+	    rv = ListCerts(certHandle, name, email, slot,
+			   PR_TRUE /*binary*/, PR_FALSE /*ascii*/,
+			   &oid_item,
+			   outFile, &pwdata);
+	} else {
+	    rv = ListCerts(certHandle, name, email, slot,
+			   certutil.options[opt_BinaryDER].activated,
+			   certutil.options[opt_ASCIIForIO].activated,
+			   NULL, outFile, &pwdata);
+	}
 	goto shutdown;
     }
     if (certutil.commands[cmd_DumpChain].activated) {
@@ -2605,6 +3167,11 @@ merge_fail:
     /*  Delete cert (-D)  */
     if (certutil.commands[cmd_DeleteCert].activated) {
 	rv = DeleteCert(certHandle, name);
+	goto shutdown;
+    }
+    /*  Rename cert (--rename)  */
+    if (certutil.commands[cmd_Rename].activated) {
+	rv = RenameCert(certHandle, name, newName);
 	goto shutdown;
     }
     /*  Delete key (-F)  */
@@ -2711,6 +3278,9 @@ merge_fail:
 					    certutil.options[opt_NoiseFile].arg,
 					    &pubkey, 
 					    certutil.options[opt_PQGFile].arg,
+					    keyAttrFlags,
+					    keyOpFlagsOn,
+					    keyOpFlagsOff,
 					    &pwdata);
 	    if (privkey == NULL) {
 		SECU_PrintError(progName, "unable to generate key(s)\n");
@@ -2743,6 +3313,8 @@ merge_fail:
         }
         certutil_extns[ext_basicConstraint].activated =
 				certutil.options[opt_AddBasicConstraintExt].activated;
+        certutil_extns[ext_nameConstraints].activated =
+                                certutil.options[opt_AddNameConstraintsExt].activated;
         certutil_extns[ext_authorityKeyID].activated =
 				certutil.options[opt_AddAuthorityKeyIDExt].activated;
         certutil_extns[ext_subjectKeyID].activated =
@@ -2768,6 +3340,12 @@ merge_fail:
             certutil_extns[ext_extKeyUsage].arg =
                 certutil.options[opt_AddCmdExtKeyUsageExt].arg;
         }
+        certutil_extns[ext_subjectAltName].activated =
+                certutil.options[opt_AddSubjectAltNameExt].activated;
+        if (certutil_extns[ext_subjectAltName].activated) {
+            certutil_extns[ext_subjectAltName].arg =
+                certutil.options[opt_AddSubjectAltNameExt].arg;
+        }
 
         certutil_extns[ext_authInfoAcc].activated =
 				certutil.options[opt_AddAuthInfoAccExt].activated;
@@ -2782,6 +3360,19 @@ merge_fail:
         certutil_extns[ext_inhibitAnyPolicy].activated =
 				certutil.options[opt_AddInhibAnyExt].activated;
     }
+
+    /* -A -C or -E    Read inFile */
+    if (certutil.commands[cmd_CreateNewCert].activated ||
+	certutil.commands[cmd_AddCert].activated ||
+	certutil.commands[cmd_AddEmailCert].activated) {
+	PRBool isCreate = certutil.commands[cmd_CreateNewCert].activated;
+	rv = SECU_ReadDERFromFile(isCreate ? &certReqDER : &certDER, inFile,
+				  certutil.options[opt_ASCIIForIO].activated,
+				  PR_TRUE);
+	if (rv)
+	    goto shutdown;
+    }
+
     /*
      *  Certificate request
      */
@@ -2794,8 +3385,10 @@ merge_fail:
 		     certutil.options[opt_ExtendedEmailAddrs].arg,
 		     certutil.options[opt_ExtendedDNSNames].arg,
                      certutil_extns,
-                     outFile ? outFile : PR_STDOUT);
-	if (rv) 
+		     (certutil.options[opt_GenericExtensions].activated ?
+		         certutil.options[opt_GenericExtensions].arg : NULL),
+                     &certReqDER);
+	if (rv)
 	    goto shutdown;
 	privkey->wincx = &pwdata;
     }
@@ -2812,31 +3405,16 @@ merge_fail:
 	static certutilExtnList nullextnlist = {{PR_FALSE, NULL}};
 	rv = CertReq(privkey, pubkey, keytype, hashAlgTag, subject,
 	             certutil.options[opt_PhoneNumber].arg,
-	             certutil.options[opt_ASCIIForIO].activated,
+		     PR_FALSE, /* do not BASE64-encode regardless of -a option */
 		     NULL,
 		     NULL,
                      nullextnlist,
-                     outFile ? outFile : PR_STDOUT);
+		     (certutil.options[opt_GenericExtensions].activated ?
+		         certutil.options[opt_GenericExtensions].arg : NULL),
+		     &certReqDER);
 	if (rv) 
 	    goto shutdown;
 	privkey->wincx = &pwdata;
-	PR_Close(outFile);
-	outFile = NULL;
-	inFile  = PR_Open(certreqfile, PR_RDONLY, 0);
-	if (!inFile) {
-	    PR_fprintf(PR_STDERR, "Failed to open file \"%s\" (%ld, %ld).\n",
-                       certreqfile, PR_GetError(), PR_GetOSError());
-	    rv = SECFailure;
-	    goto shutdown;
-	}
-	outFile = PR_Open(certfile,
-                          PR_RDWR | PR_CREATE_FILE | PR_TRUNCATE, 00660);
-	if (!outFile) {
-	    PR_fprintf(PR_STDERR, "Failed to open file \"%s\" (%ld, %ld).\n",
-                       certfile, PR_GetError(), PR_GetOSError());
-	    rv = SECFailure;
-	    goto shutdown;
-	}
     }
 
     /*  Create a certificate (-C or -S).  */
@@ -2844,13 +3422,18 @@ merge_fail:
          certutil.commands[cmd_CreateNewCert].activated) {
 	rv = CreateCert(certHandle, slot,
 	                certutil.options[opt_IssuerName].arg,
-	                inFile, outFile, &privkey, &pwdata, hashAlgTag,
+			&certReqDER, &privkey, &pwdata, hashAlgTag,
 	                serialNumber, warpmonths, validityMonths,
 		        certutil.options[opt_ExtendedEmailAddrs].arg,
 		        certutil.options[opt_ExtendedDNSNames].arg,
-	                certutil.options[opt_ASCIIForIO].activated,
+		        certutil.options[opt_ASCIIForIO].activated &&
+			    certutil.commands[cmd_CreateNewCert].activated,
 	                certutil.options[opt_SelfSign].activated,
-	                certutil_extns);
+	                certutil_extns,
+			(certutil.options[opt_GenericExtensions].activated ?
+			    certutil.options[opt_GenericExtensions].arg : NULL),
+                        certVersion,
+			&certDER);
 	if (rv) 
 	    goto shutdown;
     }
@@ -2858,39 +3441,31 @@ merge_fail:
     /* 
      * Adding a cert to the database (or slot)
      */
- 
-    if (certutil.commands[cmd_CreateAndAddCert].activated) { 
-	PORT_Assert(inFile != PR_STDIN);
-	PR_Close(inFile);
-	PR_Close(outFile);
-	outFile = NULL;
-	inFile = PR_Open(certfile, PR_RDONLY, 0);
-	if (!inFile) {
-	    PR_fprintf(PR_STDERR, "Failed to open file \"%s\" (%ld, %ld).\n",
-                       certfile, PR_GetError(), PR_GetOSError());
-	    rv = SECFailure;
-	    goto shutdown;
-	}
-    }
 
     /* -A -E or -S    Add the cert to the DB */
     if (certutil.commands[cmd_CreateAndAddCert].activated ||
          certutil.commands[cmd_AddCert].activated ||
 	 certutil.commands[cmd_AddEmailCert].activated) {
+	if (strstr(certutil.options[opt_Trust].arg, "u")) {
+	    fprintf(stderr, "Notice: Trust flag u is set automatically if the "
+			    "private key is present.\n");
+	}
 	rv = AddCert(slot, certHandle, name, 
 	             certutil.options[opt_Trust].arg,
-	             inFile, 
-	             certutil.options[opt_ASCIIForIO].activated,
+	             &certDER,
 	             certutil.commands[cmd_AddEmailCert].activated,&pwdata);
 	if (rv) 
 	    goto shutdown;
     }
 
-    if (certutil.commands[cmd_CreateAndAddCert].activated) {
-	PORT_Assert(inFile != PR_STDIN);
-	PR_Close(inFile);
-	PR_Delete(certfile);
-	PR_Delete(certreqfile);
+    if (certutil.commands[cmd_CertReq].activated ||
+	certutil.commands[cmd_CreateNewCert].activated) {
+	SECItem * item = certutil.commands[cmd_CertReq].activated ? &certReqDER
+								  : &certDER;
+	PRInt32 written = PR_Write(outFile, item->data, item->len);
+	if (written < 0 || (PRUint32) written != item->len) {
+	    rv = SECFailure;
+	}
     }
 
 shutdown:
@@ -2909,12 +3484,23 @@ shutdown:
     if (name) {
 	PL_strfree(name);
     }
-    if (outFile) {
+    if (newName) {
+	PL_strfree(newName);
+    }
+    if (inFile && inFile != PR_STDIN) {
+	PR_Close(inFile);
+    }
+    if (outFile && outFile != PR_STDOUT) {
 	PR_Close(outFile);
     }
+    SECITEM_FreeItem(&certReqDER, PR_FALSE);
+    SECITEM_FreeItem(&certDER, PR_FALSE);
     if (pwdata.data && pwdata.source == PW_PLAINTEXT) {
 	/* Allocated by a PL_strdup call in SECU_GetModulePassword. */
 	PL_strfree(pwdata.data);
+    }
+    if (email) {
+	PL_strfree(email);
     }
 
     /* Open the batch command file.

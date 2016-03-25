@@ -1,44 +1,13 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Netscape security libraries.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 2001
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 /*
  * The following handles the loading, unloading and management of
  * various PCKS #11 modules
  */
 
 #include <ctype.h>
+#include <assert.h>
 #include "pkcs11.h"
 #include "seccomon.h"
 #include "secmod.h"
@@ -46,15 +15,15 @@
 #include "secmodti.h"
 #include "pki3hack.h"
 #include "secerr.h"
-   
-#include "pk11pars.h" 
+#include "nss.h"
+#include "utilpars.h"
 
 /* create a new module */
 static  SECMODModule *
 secmod_NewModule(void)
 {
     SECMODModule *newMod;
-    PRArenaPool *arena;
+    PLArenaPool *arena;
 
 
     /* create an arena in which dllName and commonName can be
@@ -166,10 +135,532 @@ SECMODModule *
 SECMOD_CreateModule(const char *library, const char *moduleName, 
 				const char *parameters, const char *nss)
 {
-    SECMODModule *mod = secmod_NewModule();
+    return SECMOD_CreateModuleEx(library, moduleName, parameters, nss, NULL);
+}
+
+/*
+ * NSS config options format:
+ *
+ * The specified ciphers will be allowed by policy, but an application
+ * may allow more by policy explicitly:
+ * config="allow=curve1:curve2:hash1:hash2:rsa-1024..."
+ *
+ * Only the specified hashes and curves will be allowed:
+ * config="disallow=all allow=sha1:sha256:secp256r1:secp384r1"
+ *
+ * Only the specified hashes and curves will be allowed, and
+ *  RSA keys of 2048 or more will be accepted, and DH key exchange
+ *  with 1024-bit primes or more:
+ * config="disallow=all allow=sha1:sha256:secp256r1:secp384r1:min-rsa=2048:min-dh=1024"
+ *
+ * A policy that enables the AES ciphersuites and the SECP256/384 curves:
+ * config="allow=aes128-cbc:aes128-gcm:TLS1.0:TLS1.2:TLS1.1:HMAC-SHA1:SHA1:SHA256:SHA384:RSA:ECDHE-RSA:SECP256R1:SECP384R1"
+ *
+ * Disallow values are parsed first, then allow values, independent of the 
+ * order they appear.
+ *
+ * Future key words (not yet implemented):
+ * enable: turn on ciphersuites by default.
+ * disable: turn off ciphersuites by default without disallowing them by policy.
+ * flags: turn on the following flags:
+ *     ssl-lock: turn off the ability for applications to change policy with
+ *               the SSL_SetCipherPolicy (or SSL_SetPolicy).
+ *     policy-lock: turn off the ability for applications to change policy with
+ *               the call NSS_SetAlgorithmPolicy.
+ *     ssl-default-lock: turn off the ability for applications to change cipher
+ *               suite states with SSL_EnableCipher, SSL_DisableCipher.
+ *
+ */
+
+typedef struct {
+    const char *name;
+    unsigned name_size;
+    SECOidTag oid;
+    PRUint32 val;
+} oidValDef;
+
+typedef struct {
+    const char *name;
+    unsigned name_size;
+    PRInt32 option;
+} optionFreeDef;
+
+typedef struct {
+    const char *name;
+    unsigned name_size;
+    PRUint32 flag;
+} policyFlagDef;
+
+/*
+ *  This table should be merged with the SECOID table.
+ */
+#define CIPHER_NAME(x) x,(sizeof(x)-1)
+static const oidValDef algOptList[] = {
+    /* Curves */
+    {CIPHER_NAME("PRIME192V1"),SEC_OID_ANSIX962_EC_PRIME192V1,
+     NSS_USE_ALG_IN_SSL_KX | NSS_USE_ALG_IN_CERT_SIGNATURE},
+    {CIPHER_NAME("PRIME192V2"), SEC_OID_ANSIX962_EC_PRIME192V2,
+     NSS_USE_ALG_IN_SSL_KX | NSS_USE_ALG_IN_CERT_SIGNATURE},
+    {CIPHER_NAME("PRIME192V3"), SEC_OID_ANSIX962_EC_PRIME192V3,
+     NSS_USE_ALG_IN_SSL_KX | NSS_USE_ALG_IN_CERT_SIGNATURE},
+    {CIPHER_NAME("PRIME239V1"), SEC_OID_ANSIX962_EC_PRIME239V1,
+     NSS_USE_ALG_IN_SSL_KX | NSS_USE_ALG_IN_CERT_SIGNATURE},
+    {CIPHER_NAME("PRIME239V2"), SEC_OID_ANSIX962_EC_PRIME239V2,
+     NSS_USE_ALG_IN_SSL_KX | NSS_USE_ALG_IN_CERT_SIGNATURE},
+    {CIPHER_NAME("PRIME239V3"), SEC_OID_ANSIX962_EC_PRIME239V3,
+     NSS_USE_ALG_IN_SSL_KX | NSS_USE_ALG_IN_CERT_SIGNATURE},
+    {CIPHER_NAME("PRIME256V1"), SEC_OID_ANSIX962_EC_PRIME256V1,
+     NSS_USE_ALG_IN_SSL_KX | NSS_USE_ALG_IN_CERT_SIGNATURE},
+    {CIPHER_NAME("SECP112R1"), SEC_OID_SECG_EC_SECP112R1,
+     NSS_USE_ALG_IN_SSL_KX | NSS_USE_ALG_IN_CERT_SIGNATURE},
+    {CIPHER_NAME("SECP112R2"), SEC_OID_SECG_EC_SECP112R2,
+     NSS_USE_ALG_IN_SSL_KX | NSS_USE_ALG_IN_CERT_SIGNATURE},
+    {CIPHER_NAME("SECP128R1"), SEC_OID_SECG_EC_SECP128R1,
+     NSS_USE_ALG_IN_SSL_KX | NSS_USE_ALG_IN_CERT_SIGNATURE},
+    {CIPHER_NAME("SECP128R2"), SEC_OID_SECG_EC_SECP128R2,
+     NSS_USE_ALG_IN_SSL_KX | NSS_USE_ALG_IN_CERT_SIGNATURE},
+    {CIPHER_NAME("SECP160K1"), SEC_OID_SECG_EC_SECP160K1,
+     NSS_USE_ALG_IN_SSL_KX | NSS_USE_ALG_IN_CERT_SIGNATURE},
+    {CIPHER_NAME("SECP160R1"), SEC_OID_SECG_EC_SECP160R1,
+     NSS_USE_ALG_IN_SSL_KX | NSS_USE_ALG_IN_CERT_SIGNATURE},
+    {CIPHER_NAME("SECP160R2"), SEC_OID_SECG_EC_SECP160R2,
+     NSS_USE_ALG_IN_SSL_KX | NSS_USE_ALG_IN_CERT_SIGNATURE},
+    {CIPHER_NAME("SECP192K1"), SEC_OID_SECG_EC_SECP192K1,
+     NSS_USE_ALG_IN_SSL_KX | NSS_USE_ALG_IN_CERT_SIGNATURE},
+    {CIPHER_NAME("SECP192R1"), SEC_OID_ANSIX962_EC_PRIME192V1,
+     NSS_USE_ALG_IN_SSL_KX | NSS_USE_ALG_IN_CERT_SIGNATURE},
+    {CIPHER_NAME("SECP224K1"), SEC_OID_SECG_EC_SECP224K1,
+     NSS_USE_ALG_IN_SSL_KX | NSS_USE_ALG_IN_CERT_SIGNATURE},
+    {CIPHER_NAME("SECP256K1"), SEC_OID_SECG_EC_SECP256K1,
+     NSS_USE_ALG_IN_SSL_KX | NSS_USE_ALG_IN_CERT_SIGNATURE},
+    {CIPHER_NAME("SECP256R1"), SEC_OID_ANSIX962_EC_PRIME256V1,
+     NSS_USE_ALG_IN_SSL_KX | NSS_USE_ALG_IN_CERT_SIGNATURE},
+    {CIPHER_NAME("SECP384R1"), SEC_OID_SECG_EC_SECP384R1,
+     NSS_USE_ALG_IN_SSL_KX | NSS_USE_ALG_IN_CERT_SIGNATURE},
+    {CIPHER_NAME("SECP521R1"), SEC_OID_SECG_EC_SECP521R1,
+     NSS_USE_ALG_IN_SSL_KX | NSS_USE_ALG_IN_CERT_SIGNATURE},
+    /* ANSI X9.62 named elliptic curves (characteristic two field) */
+    {CIPHER_NAME("C2PNB163V1"), SEC_OID_ANSIX962_EC_C2PNB163V1,
+     NSS_USE_ALG_IN_SSL_KX | NSS_USE_ALG_IN_CERT_SIGNATURE},
+    {CIPHER_NAME("C2PNB163V2"), SEC_OID_ANSIX962_EC_C2PNB163V2,
+     NSS_USE_ALG_IN_SSL_KX | NSS_USE_ALG_IN_CERT_SIGNATURE},
+    {CIPHER_NAME("C2PNB163V3"), SEC_OID_ANSIX962_EC_C2PNB163V3,
+     NSS_USE_ALG_IN_SSL_KX | NSS_USE_ALG_IN_CERT_SIGNATURE},
+    {CIPHER_NAME("C2PNB176V1"), SEC_OID_ANSIX962_EC_C2PNB176V1,
+     NSS_USE_ALG_IN_SSL_KX | NSS_USE_ALG_IN_CERT_SIGNATURE},
+    {CIPHER_NAME("C2TNB191V1"), SEC_OID_ANSIX962_EC_C2TNB191V1,
+     NSS_USE_ALG_IN_SSL_KX | NSS_USE_ALG_IN_CERT_SIGNATURE},
+    {CIPHER_NAME("C2TNB191V2"), SEC_OID_ANSIX962_EC_C2TNB191V2,
+     NSS_USE_ALG_IN_SSL_KX | NSS_USE_ALG_IN_CERT_SIGNATURE},
+    {CIPHER_NAME("C2TNB191V3"), SEC_OID_ANSIX962_EC_C2TNB191V3,
+     NSS_USE_ALG_IN_SSL_KX | NSS_USE_ALG_IN_CERT_SIGNATURE},
+    {CIPHER_NAME("C2ONB191V4"), SEC_OID_ANSIX962_EC_C2ONB191V4,
+     NSS_USE_ALG_IN_SSL_KX | NSS_USE_ALG_IN_CERT_SIGNATURE},
+    {CIPHER_NAME("C2ONB191V5"), SEC_OID_ANSIX962_EC_C2ONB191V5,
+     NSS_USE_ALG_IN_SSL_KX | NSS_USE_ALG_IN_CERT_SIGNATURE},
+    {CIPHER_NAME("C2PNB208W1"), SEC_OID_ANSIX962_EC_C2PNB208W1,
+     NSS_USE_ALG_IN_SSL_KX | NSS_USE_ALG_IN_CERT_SIGNATURE},
+    {CIPHER_NAME("C2TNB239V1"), SEC_OID_ANSIX962_EC_C2TNB239V1,
+     NSS_USE_ALG_IN_SSL_KX | NSS_USE_ALG_IN_CERT_SIGNATURE},
+    {CIPHER_NAME("C2TNB239V2"), SEC_OID_ANSIX962_EC_C2TNB239V2,
+     NSS_USE_ALG_IN_SSL_KX | NSS_USE_ALG_IN_CERT_SIGNATURE},
+    {CIPHER_NAME("C2TNB239V3"), SEC_OID_ANSIX962_EC_C2TNB239V3,
+     NSS_USE_ALG_IN_SSL_KX | NSS_USE_ALG_IN_CERT_SIGNATURE},
+    {CIPHER_NAME("C2ONB239V4"), SEC_OID_ANSIX962_EC_C2ONB239V4,
+     NSS_USE_ALG_IN_SSL_KX | NSS_USE_ALG_IN_CERT_SIGNATURE},
+    {CIPHER_NAME("C2ONB239V5"), SEC_OID_ANSIX962_EC_C2ONB239V5,
+     NSS_USE_ALG_IN_SSL_KX | NSS_USE_ALG_IN_CERT_SIGNATURE},
+    {CIPHER_NAME("C2PNB272W1"), SEC_OID_ANSIX962_EC_C2PNB272W1,
+     NSS_USE_ALG_IN_SSL_KX | NSS_USE_ALG_IN_CERT_SIGNATURE},
+    {CIPHER_NAME("C2PNB304W1"), SEC_OID_ANSIX962_EC_C2PNB304W1,
+     NSS_USE_ALG_IN_SSL_KX | NSS_USE_ALG_IN_CERT_SIGNATURE},
+    {CIPHER_NAME("C2TNB359V1"), SEC_OID_ANSIX962_EC_C2TNB359V1,
+     NSS_USE_ALG_IN_SSL_KX | NSS_USE_ALG_IN_CERT_SIGNATURE},
+    {CIPHER_NAME("C2PNB368W1"), SEC_OID_ANSIX962_EC_C2PNB368W1,
+     NSS_USE_ALG_IN_SSL_KX | NSS_USE_ALG_IN_CERT_SIGNATURE},
+    {CIPHER_NAME("C2TNB431R1"), SEC_OID_ANSIX962_EC_C2TNB431R1,
+     NSS_USE_ALG_IN_SSL_KX | NSS_USE_ALG_IN_CERT_SIGNATURE},
+    /* SECG named elliptic curves (characteristic two field) */
+    {CIPHER_NAME("SECT113R1"), SEC_OID_SECG_EC_SECT113R1,
+     NSS_USE_ALG_IN_SSL_KX | NSS_USE_ALG_IN_CERT_SIGNATURE},
+    {CIPHER_NAME("SECT131R1"), SEC_OID_SECG_EC_SECT113R2,
+     NSS_USE_ALG_IN_SSL_KX | NSS_USE_ALG_IN_CERT_SIGNATURE},
+    {CIPHER_NAME("SECT131R1"), SEC_OID_SECG_EC_SECT131R1,
+     NSS_USE_ALG_IN_SSL_KX | NSS_USE_ALG_IN_CERT_SIGNATURE},
+    {CIPHER_NAME("SECT131R2"), SEC_OID_SECG_EC_SECT131R2,
+     NSS_USE_ALG_IN_SSL_KX | NSS_USE_ALG_IN_CERT_SIGNATURE},
+    {CIPHER_NAME("SECT163K1"), SEC_OID_SECG_EC_SECT163K1,
+     NSS_USE_ALG_IN_SSL_KX | NSS_USE_ALG_IN_CERT_SIGNATURE},
+    {CIPHER_NAME("SECT163R1"), SEC_OID_SECG_EC_SECT163R1,
+     NSS_USE_ALG_IN_SSL_KX | NSS_USE_ALG_IN_CERT_SIGNATURE},
+    {CIPHER_NAME("SECT163R2"), SEC_OID_SECG_EC_SECT163R2,
+     NSS_USE_ALG_IN_SSL_KX | NSS_USE_ALG_IN_CERT_SIGNATURE},
+    {CIPHER_NAME("SECT193R1"), SEC_OID_SECG_EC_SECT193R1,
+     NSS_USE_ALG_IN_SSL_KX | NSS_USE_ALG_IN_CERT_SIGNATURE},
+    {CIPHER_NAME("SECT193R2"), SEC_OID_SECG_EC_SECT193R2,
+     NSS_USE_ALG_IN_SSL_KX | NSS_USE_ALG_IN_CERT_SIGNATURE},
+    {CIPHER_NAME("SECT233K1"), SEC_OID_SECG_EC_SECT233K1,
+     NSS_USE_ALG_IN_SSL_KX | NSS_USE_ALG_IN_CERT_SIGNATURE},
+    {CIPHER_NAME("SECT233R1"), SEC_OID_SECG_EC_SECT233R1,
+     NSS_USE_ALG_IN_SSL_KX | NSS_USE_ALG_IN_CERT_SIGNATURE},
+    {CIPHER_NAME("SECT239K1"), SEC_OID_SECG_EC_SECT239K1,
+     NSS_USE_ALG_IN_SSL_KX | NSS_USE_ALG_IN_CERT_SIGNATURE},
+    {CIPHER_NAME("SECT283K1"), SEC_OID_SECG_EC_SECT283K1,
+     NSS_USE_ALG_IN_SSL_KX | NSS_USE_ALG_IN_CERT_SIGNATURE},
+    {CIPHER_NAME("SECT283R1"), SEC_OID_SECG_EC_SECT283R1,
+     NSS_USE_ALG_IN_SSL_KX | NSS_USE_ALG_IN_CERT_SIGNATURE},
+    {CIPHER_NAME("SECT409K1"), SEC_OID_SECG_EC_SECT409K1,
+     NSS_USE_ALG_IN_SSL_KX | NSS_USE_ALG_IN_CERT_SIGNATURE},
+    {CIPHER_NAME("SECT409R1"), SEC_OID_SECG_EC_SECT409R1,
+     NSS_USE_ALG_IN_SSL_KX | NSS_USE_ALG_IN_CERT_SIGNATURE},
+    {CIPHER_NAME("SECT571K1"), SEC_OID_SECG_EC_SECT571K1,
+     NSS_USE_ALG_IN_SSL_KX | NSS_USE_ALG_IN_CERT_SIGNATURE},
+    {CIPHER_NAME("SECT571R1"), SEC_OID_SECG_EC_SECT571R1,
+     NSS_USE_ALG_IN_SSL_KX | NSS_USE_ALG_IN_CERT_SIGNATURE},
+
+    /* Hashes */
+    {CIPHER_NAME("MD2"), SEC_OID_MD2,
+     NSS_USE_ALG_IN_SSL_KX | NSS_USE_ALG_IN_CERT_SIGNATURE},
+    {CIPHER_NAME("MD4"), SEC_OID_MD4,
+     NSS_USE_ALG_IN_SSL_KX | NSS_USE_ALG_IN_CERT_SIGNATURE},
+    {CIPHER_NAME("MD5"), SEC_OID_MD5,
+     NSS_USE_ALG_IN_SSL_KX | NSS_USE_ALG_IN_CERT_SIGNATURE},
+    {CIPHER_NAME("SHA1"), SEC_OID_SHA1,
+     NSS_USE_ALG_IN_SSL_KX | NSS_USE_ALG_IN_CERT_SIGNATURE},
+    {CIPHER_NAME("SHA224"), SEC_OID_SHA224,
+     NSS_USE_ALG_IN_SSL_KX | NSS_USE_ALG_IN_CERT_SIGNATURE},
+    {CIPHER_NAME("SHA256"), SEC_OID_SHA256,
+     NSS_USE_ALG_IN_SSL_KX | NSS_USE_ALG_IN_CERT_SIGNATURE},
+    {CIPHER_NAME("SHA384"), SEC_OID_SHA384,
+     NSS_USE_ALG_IN_SSL_KX | NSS_USE_ALG_IN_CERT_SIGNATURE},
+    {CIPHER_NAME("SHA512"), SEC_OID_SHA512,
+     NSS_USE_ALG_IN_SSL_KX | NSS_USE_ALG_IN_CERT_SIGNATURE},
+
+    /* MACs */
+    {CIPHER_NAME("HMAC-SHA1"), SEC_OID_HMAC_SHA1, NSS_USE_ALG_IN_SSL},
+    {CIPHER_NAME("HMAC-SHA224"), SEC_OID_HMAC_SHA224, NSS_USE_ALG_IN_SSL},
+    {CIPHER_NAME("HMAC-SHA256"), SEC_OID_HMAC_SHA256, NSS_USE_ALG_IN_SSL},
+    {CIPHER_NAME("HMAC-SHA384"), SEC_OID_HMAC_SHA384, NSS_USE_ALG_IN_SSL},
+    {CIPHER_NAME("HMAC-SHA512"), SEC_OID_HMAC_SHA512, NSS_USE_ALG_IN_SSL},
+    {CIPHER_NAME("HMAC-MD5"), SEC_OID_HMAC_MD5, NSS_USE_ALG_IN_SSL},
+
+    /* Ciphers */
+    {CIPHER_NAME("AES128-CBC"), SEC_OID_AES_128_CBC, NSS_USE_ALG_IN_SSL},
+    {CIPHER_NAME("AES192-CBC"), SEC_OID_AES_192_CBC, NSS_USE_ALG_IN_SSL},
+    {CIPHER_NAME("AES256-CBC"), SEC_OID_AES_256_CBC, NSS_USE_ALG_IN_SSL},
+    {CIPHER_NAME("AES128-GCM"), SEC_OID_AES_128_GCM, NSS_USE_ALG_IN_SSL},
+    {CIPHER_NAME("AES192-GCM"), SEC_OID_AES_192_GCM, NSS_USE_ALG_IN_SSL},
+    {CIPHER_NAME("AES256-GCM"), SEC_OID_AES_256_GCM, NSS_USE_ALG_IN_SSL},
+    {CIPHER_NAME("CAMELLIA128-CBC"), SEC_OID_CAMELLIA_128_CBC, NSS_USE_ALG_IN_SSL},
+    {CIPHER_NAME("CAMELLIA192-CBC"), SEC_OID_CAMELLIA_192_CBC, NSS_USE_ALG_IN_SSL},
+    {CIPHER_NAME("CAMELLIA256-CBC"), SEC_OID_CAMELLIA_256_CBC, NSS_USE_ALG_IN_SSL},
+    {CIPHER_NAME("CHACHA20-POLY1305"), SEC_OID_CHACHA20_POLY1305, NSS_USE_ALG_IN_SSL},
+    {CIPHER_NAME("SEED-CBC"), SEC_OID_SEED_CBC, NSS_USE_ALG_IN_SSL},
+    {CIPHER_NAME("DES-EDE3-CBC"), SEC_OID_DES_EDE3_CBC, NSS_USE_ALG_IN_SSL},
+    {CIPHER_NAME("DES-40-CBC"), SEC_OID_DES_40_CBC, NSS_USE_ALG_IN_SSL},
+    {CIPHER_NAME("DES-CBC"), SEC_OID_DES_CBC, NSS_USE_ALG_IN_SSL},
+    {CIPHER_NAME("NULL-CIPHER"), SEC_OID_NULL_CIPHER, NSS_USE_ALG_IN_SSL},
+    {CIPHER_NAME("RC2"), SEC_OID_RC2_CBC, NSS_USE_ALG_IN_SSL},
+    {CIPHER_NAME("RC4"), SEC_OID_RC4, NSS_USE_ALG_IN_SSL},
+    {CIPHER_NAME("IDEA"), SEC_OID_IDEA_CBC, NSS_USE_ALG_IN_SSL},
+
+    /* Key exchange */
+    {CIPHER_NAME("RSA"), SEC_OID_TLS_RSA, NSS_USE_ALG_IN_SSL_KX},
+    {CIPHER_NAME("RSA-EXPORT"), SEC_OID_TLS_RSA_EXPORT, NSS_USE_ALG_IN_SSL_KX},
+    {CIPHER_NAME("DHE-RSA"), SEC_OID_TLS_DHE_RSA, NSS_USE_ALG_IN_SSL_KX},
+    {CIPHER_NAME("DHE-DSS"), SEC_OID_TLS_DHE_DSS, NSS_USE_ALG_IN_SSL_KX},
+    {CIPHER_NAME("DH-RSA"), SEC_OID_TLS_DH_RSA, NSS_USE_ALG_IN_SSL_KX},
+    {CIPHER_NAME("DH-DSS"), SEC_OID_TLS_DH_DSS, NSS_USE_ALG_IN_SSL_KX},
+    {CIPHER_NAME("ECDHE-ECDSA"), SEC_OID_TLS_ECDHE_ECDSA, NSS_USE_ALG_IN_SSL_KX},
+    {CIPHER_NAME("ECDHE-RSA"), SEC_OID_TLS_ECDHE_RSA, NSS_USE_ALG_IN_SSL_KX},
+    {CIPHER_NAME("ECDH-ECDSA"), SEC_OID_TLS_ECDH_ECDSA, NSS_USE_ALG_IN_SSL_KX},
+    {CIPHER_NAME("ECDH-RSA"), SEC_OID_TLS_ECDH_RSA, NSS_USE_ALG_IN_SSL_KX},
+};
+
+static const optionFreeDef sslOptList[] = {
+    /* Versions */
+    {CIPHER_NAME("SSL2.0"), 0x002},
+    {CIPHER_NAME("SSL3.0"), 0x300},
+    {CIPHER_NAME("SSL3.1"), 0x301},
+    {CIPHER_NAME("TLS1.0"), 0x301},
+    {CIPHER_NAME("TLS1.1"), 0x302},
+    {CIPHER_NAME("TLS1.2"), 0x303},
+    {CIPHER_NAME("TLS1.3"), 0x304},
+    {CIPHER_NAME("DTLS1.0"),0x302},
+    {CIPHER_NAME("DTLS1.1"),0x302},
+    {CIPHER_NAME("DTLS1.2"),0x303},
+    {CIPHER_NAME("DTLS1.3"),0x304},
+};
+
+static const optionFreeDef freeOptList[] = {
+
+    /* Restrictions for asymetric keys */
+    {CIPHER_NAME("RSA-MIN"), NSS_RSA_MIN_KEY_SIZE},
+    {CIPHER_NAME("DH-MIN"),  NSS_DH_MIN_KEY_SIZE},
+    {CIPHER_NAME("DSA-MIN"), NSS_DSA_MIN_KEY_SIZE},
+    /* constraints on SSL Protocols */
+    {CIPHER_NAME("TLS-VERSION-MIN"), NSS_TLS_VERSION_MIN_POLICY},
+    {CIPHER_NAME("TLS-VERSION-MAX"), NSS_TLS_VERSION_MAX_POLICY},
+    /* constraints on DTLS Protocols */
+    {CIPHER_NAME("DTLS-VERSION-MIN"), NSS_DTLS_VERSION_MIN_POLICY},
+    {CIPHER_NAME("DTLS-VERSION-MAX"), NSS_DTLS_VERSION_MIN_POLICY}
+};
+
+static const policyFlagDef policyFlagList[] = {
+    {CIPHER_NAME("SSL"), NSS_USE_ALG_IN_SSL},
+    {CIPHER_NAME("SSL-KEY-EXCHANGE"), NSS_USE_ALG_IN_SSL_KX},
+    /* add other key exhanges in the future */
+    {CIPHER_NAME("KEY-EXCHANGE"), NSS_USE_ALG_IN_SSL_KX},
+    {CIPHER_NAME("CERT-SIGNATURE"), NSS_USE_ALG_IN_CERT_SIGNATURE},
+    /* add other signatures in the future */
+    {CIPHER_NAME("SIGNATURE"), NSS_USE_ALG_IN_CERT_SIGNATURE},
+    /* enable everything */
+    {CIPHER_NAME("ALL"), NSS_USE_ALG_IN_SSL|NSS_USE_ALG_IN_SSL_KX|
+			 NSS_USE_ALG_IN_CERT_SIGNATURE},
+    {CIPHER_NAME("NONE"), 0}
+};
+
+/*
+ *  Get the next cipher on the list. point to the next one in 'next'.
+ *  return the length;
+ */
+static const char *
+secmod_ArgGetSubValue(const char *cipher, char sep1, char sep2,
+		      int *len, const char **next)
+{
+    const char *start = cipher;
+
+    if (start == NULL) {
+	*len = 0;
+	*next = NULL;
+	return start;
+    }
+
+    for (; *cipher && *cipher != sep2; cipher++) {
+	if (*cipher == sep1) {
+	    *next = cipher+1;
+	    *len = cipher - start;
+	    return start;
+	}
+    }
+    *next = NULL;
+    *len = cipher-start;
+    return start;
+}
+
+static PRUint32
+secmod_parsePolicyValue(const char *policyFlags, int policyLength)
+{
+    const char *flag, *currentString;
+    PRUint32 flags = 0;
+    int i;
+
+    for (currentString = policyFlags; currentString
+			&& currentString < policyFlags + policyLength;  ) {
+        int length;
+        flag = secmod_ArgGetSubValue(currentString, ',', ':',  &length,
+							&currentString);
+	if (length == 0) {
+	    continue;
+	}
+        for (i = 0; i < PR_ARRAY_SIZE(policyFlagList); i++) {
+	    const policyFlagDef *policy = &policyFlagList[i];
+	    unsigned name_size = policy->name_size;
+            if ((policy->name_size == length) &&
+                PORT_Strncasecmp(policy->name, flag, name_size) == 0) {
+		flags |= policy->flag;
+		break;
+	    }
+        }
+    }
+    return flags;
+}
+
+
+/* allow symbolic names for values. The only ones currently defines or
+ * SSL protocol versions. */
+static PRInt32
+secmod_getPolicyOptValue(const char *policyValue, int policyValueLength)
+{
+    PRInt32 val = atoi(policyValue);
+    int i;
+
+
+    if ((val != 0) || (*policyValue == '0')) {
+	return val;
+    }
+    for (i = 0; i < PR_ARRAY_SIZE(sslOptList); i++) {
+	if (policyValueLength == sslOptList[i].name_size &&
+		PORT_Strncasecmp(sslOptList[i].name, policyValue,
+					sslOptList[i].name_size) == 0 ) {
+		val = sslOptList[i].option;
+		break;
+	}
+    }
+    return val;
+}
+
+static SECStatus secmod_applyCryptoPolicy(const char *policyString,
+                                          PRBool allow)
+{
+    const char *cipher, *currentString;
+    unsigned i;
+    SECStatus rv = SECSuccess;
+    PRBool unknown;
+
+
+    if (policyString == NULL || policyString[0] == 0) {
+        return SECSuccess;      /* do nothing */
+    }
+
+    /* if we change any of these, make sure it gets applied in ssl as well */
+    NSS_SetAlgorithmPolicy(SEC_OID_APPLY_SSL_POLICY, NSS_USE_POLICY_IN_SSL, 0);
+
+    for (currentString = policyString; currentString; ) {
+        int length;
+	PRBool newValue = PR_FALSE;
+
+        cipher = secmod_ArgGetSubValue(currentString, ':', 0, &length,
+							&currentString);
+        unknown = PR_TRUE;
+	if (length >= 3 && cipher[3] == '/') {
+	    newValue = PR_TRUE;
+	}
+	if ((newValue || (length == 3))
+				 && PORT_Strncasecmp(cipher, "all", 3) == 0) {
+		/* disable or enable all options by default */
+		PRUint32 value = 0;
+		if (newValue) {
+		    value = secmod_parsePolicyValue(&cipher[3]+1, length-3-1);
+		}
+            for (i = 0; i < PR_ARRAY_SIZE(algOptList); i++) {
+		PRUint32 enable, disable;
+		if (!newValue) {
+		    value = algOptList[i].val;
+		}
+		if (allow) {
+		    enable = value;
+		    disable =  0;
+		} else {
+		    enable =  0;
+		    disable = value;
+		}
+                NSS_SetAlgorithmPolicy(algOptList[i].oid, enable, disable);
+            }
+	    continue;
+	}
+
+        for (i = 0; i < PR_ARRAY_SIZE(algOptList); i++) {
+	    const oidValDef *algOpt = &algOptList[i];
+	    unsigned name_size = algOpt->name_size;
+	    PRBool newValue = PR_FALSE;
+
+	    if ((length >= name_size) && (cipher[name_size] == '/')) {
+		newValue = PR_TRUE;
+	    }
+            if ( (newValue || algOpt->name_size == length) &&
+                PORT_Strncasecmp(algOpt->name, cipher, name_size) == 0) {
+		PRUint32 value = algOpt->val;
+		PRUint32 enable, disable;
+		if (newValue) {
+		     value = secmod_parsePolicyValue(&cipher[name_size]+1,
+						length-name_size-1);
+		}
+		if (allow) {
+		    enable = value;
+		    disable =  0;
+		} else {
+		    enable =  0;
+		    disable = value;
+		}
+                rv = NSS_SetAlgorithmPolicy(algOpt->oid, enable, disable);
+                if (rv != SECSuccess) {
+                    /* could not enable option */
+		    /* NSS_SetAlgorithPolicy should have set the error code */
+                    return SECFailure;
+                }
+                unknown = PR_FALSE;
+                break;
+            }
+        }
+	if (!unknown) {
+	    continue;
+	}
+
+        for (i = 0; i < PR_ARRAY_SIZE(freeOptList); i++) {
+	    const optionFreeDef *freeOpt = &freeOptList[i];
+	    unsigned name_size = freeOpt->name_size;
+
+	    if ((length > name_size) && cipher[name_size] == '=' &&
+		PORT_Strncasecmp(freeOpt->name, cipher, name_size) == 0 ) {
+	        PRInt32 val = secmod_getPolicyOptValue( &cipher[name_size+1],
+			length-name_size-1);
+
+                rv = NSS_OptionSet(freeOpt->option, val);
+	        if (rv != SECSuccess) {
+                    /* could not enable option */
+		    /* NSS_OptionSet should have set the error code */
+                    return SECFailure;
+                }
+		/* to allow the policy to expand in the future. ignore ciphers
+		 * we don't understand */
+		unknown = PR_FALSE;
+                break;
+	    }
+        }
+    }
+    return rv;
+}
+
+static SECStatus
+secmod_parseCryptoPolicy(const char *policyConfig)
+{
+    char *disallow, *allow;
+    SECStatus rv;
+
+    if (policyConfig == NULL) {
+	return SECSuccess; /* no policy given */
+    }
+    /* make sure we initialize the oid table and set all the default policy
+     * values first so we can override them here */
+    rv = SECOID_Init();
+    if (rv != SECSuccess) {
+	return rv;
+    }
+    disallow = NSSUTIL_ArgGetParamValue("disallow",policyConfig);
+    rv = secmod_applyCryptoPolicy(disallow, PR_FALSE);
+    if (disallow) PORT_Free(disallow);
+    if (rv != SECSuccess) {
+	return rv;
+    }
+    allow = NSSUTIL_ArgGetParamValue("allow",policyConfig);
+    rv = secmod_applyCryptoPolicy(allow, PR_TRUE);
+    if (allow) PORT_Free(allow);
+    return rv;
+}
+
+/*
+ * for 3.4 we continue to use the old SECMODModule structure
+ */
+SECMODModule *
+SECMOD_CreateModuleEx(const char *library, const char *moduleName, 
+				const char *parameters, const char *nss,
+				const char *config)
+{
+    SECMODModule *mod;
+    SECStatus rv;
     char *slotParams,*ciphers;
     /* pk11pars.h still does not have const char * interfaces */
     char *nssc = (char *)nss;
+
+    rv = secmod_parseCryptoPolicy(config);
+
+    /* do not load the module if policy parsing fails */
+    if (rv != SECSuccess) {
+        return NULL;
+    }
+
+    mod = secmod_NewModule();
     if (mod == NULL) return NULL;
 
     mod->commonName = PORT_ArenaStrdup(mod->arena,moduleName ? moduleName : "");
@@ -180,22 +671,23 @@ SECMOD_CreateModule(const char *library, const char *moduleName,
     if (parameters) {
 	mod->libraryParams = PORT_ArenaStrdup(mod->arena,parameters);
     }
-    mod->internal   = secmod_argHasFlag("flags","internal",nssc);
-    mod->isFIPS     = secmod_argHasFlag("flags","FIPS",nssc);
-    mod->isCritical = secmod_argHasFlag("flags","critical",nssc);
-    slotParams      = secmod_argGetParamValue("slotParams",nssc);
-    mod->slotInfo   = secmod_argParseSlotInfo(mod->arena,slotParams,
+
+    mod->internal   = NSSUTIL_ArgHasFlag("flags","internal",nssc);
+    mod->isFIPS     = NSSUTIL_ArgHasFlag("flags","FIPS",nssc);
+    mod->isCritical = NSSUTIL_ArgHasFlag("flags","critical",nssc);
+    slotParams      = NSSUTIL_ArgGetParamValue("slotParams",nssc);
+    mod->slotInfo   = NSSUTIL_ArgParseSlotInfo(mod->arena,slotParams,
 							&mod->slotInfoCount);
     if (slotParams) PORT_Free(slotParams);
     /* new field */
-    mod->trustOrder  = secmod_argReadLong("trustOrder",nssc,
-					SECMOD_DEFAULT_TRUST_ORDER,NULL);
+    mod->trustOrder  = NSSUTIL_ArgReadLong("trustOrder",nssc,
+					NSSUTIL_DEFAULT_TRUST_ORDER,NULL);
     /* new field */
-    mod->cipherOrder = secmod_argReadLong("cipherOrder",nssc,
-					SECMOD_DEFAULT_CIPHER_ORDER,NULL);
+    mod->cipherOrder = NSSUTIL_ArgReadLong("cipherOrder",nssc,
+					NSSUTIL_DEFAULT_CIPHER_ORDER,NULL);
     /* new field */
-    mod->isModuleDB   = secmod_argHasFlag("flags","moduleDB",nssc);
-    mod->moduleDBOnly = secmod_argHasFlag("flags","moduleDBOnly",nssc);
+    mod->isModuleDB   = NSSUTIL_ArgHasFlag("flags","moduleDB",nssc);
+    mod->moduleDBOnly = NSSUTIL_ArgHasFlag("flags","moduleDBOnly",nssc);
     if (mod->moduleDBOnly) mod->isModuleDB = PR_TRUE;
 
     /* we need more bits, but we also want to preserve binary compatibility 
@@ -206,10 +698,10 @@ SECMOD_CreateModule(const char *library, const char *moduleName,
      * code checking if (mod->isModuleDB) will continue to work correctly. */
     if (mod->isModuleDB) {
 	char flags = SECMOD_FLAG_MODULE_DB_IS_MODULE_DB;
-	if (secmod_argHasFlag("flags","skipFirst",nssc)) {
+	if (NSSUTIL_ArgHasFlag("flags","skipFirst",nssc)) {
 	    flags |= SECMOD_FLAG_MODULE_DB_SKIP_FIRST;
 	}
-	if (secmod_argHasFlag("flags","defaultModDB",nssc)) {
+	if (NSSUTIL_ArgHasFlag("flags","defaultModDB",nssc)) {
 	    flags |= SECMOD_FLAG_MODULE_DB_DEFAULT_MODDB;
 	}
 	/* additional moduleDB flags could be added here in the future */
@@ -219,14 +711,14 @@ SECMOD_CreateModule(const char *library, const char *moduleName,
     if (mod->internal) {
 	char flags = SECMOD_FLAG_INTERNAL_IS_INTERNAL;
 
-	if (secmod_argHasFlag("flags", "internalKeySlot", nssc)) {
+	if (NSSUTIL_ArgHasFlag("flags", "internalKeySlot", nssc)) {
 	    flags |= SECMOD_FLAG_INTERNAL_KEY_SLOT;
 	}
 	mod->internal = (PRBool) flags;
     }
 
-    ciphers = secmod_argGetParamValue("ciphers",nssc);
-    secmod_argSetNewCipherFlags(&mod->ssl[0],ciphers);
+    ciphers = NSSUTIL_ArgGetParamValue("ciphers",nssc);
+    NSSUTIL_ArgParseCipherFlags(&mod->ssl[0],ciphers);
     if (ciphers) PORT_Free(ciphers);
 
     secmod_PrivateModuleCount++;
@@ -258,9 +750,18 @@ secmod_IsInternalKeySlot(SECMODModule *mod)
    return (flags & SECMOD_FLAG_INTERNAL_KEY_SLOT) ? PR_TRUE : PR_FALSE;
 }
 
-/* forward declarations */
-static int secmod_escapeSize(const char *string, char quote);
-static char *secmod_addEscape(const char *string, char quote);
+void
+secmod_SetInternalKeySlotFlag(SECMODModule *mod, PRBool val)
+{
+   char flags = (char) mod->internal;
+
+   if (val)  {
+	flags |= SECMOD_FLAG_INTERNAL_KEY_SLOT;
+   } else {
+	flags &= ~SECMOD_FLAG_INTERNAL_KEY_SLOT;
+   }
+   mod->internal = flags;
+}
 
 /*
  * copy desc and value into target. Target is known to be big enough to
@@ -277,7 +778,7 @@ secmod_doDescCopy(char *target, int *targetLen, const char *desc,
 {
     int diff, esc_len;
 
-    esc_len = secmod_escapeSize(value, '\"') - 1;
+    esc_len = NSSUTIL_EscapeSize(value, '\"') - 1;
     diff = esc_len - strlen(value);
     if (diff > 0) {
 	/* we need to escape... expand newSpecPtr as well to make sure
@@ -288,7 +789,7 @@ secmod_doDescCopy(char *target, int *targetLen, const char *desc,
 	}
 	*targetLen += diff;
 	target = newPtr;
-	value = secmod_addEscape(value, '\"');
+	value = NSSUTIL_Escape(value, '\"');
 	if (value == NULL) {
 	    return target; /* couldn't escape value, just drop the copy */
 	}
@@ -299,6 +800,9 @@ secmod_doDescCopy(char *target, int *targetLen, const char *desc,
     PORT_Memcpy(target, value, esc_len);
     target += esc_len;
     *target++='\"';
+    if (diff > 0) {
+	PORT_Free(value);
+    }
     return target;
 }
 
@@ -322,18 +826,18 @@ secmod_doDescCopy(char *target, int *targetLen, const char *desc,
  * spec.
  */
 char *
-secmod_ParseModuleSpecForTokens(PRBool convert, PRBool isFIPS, 
-				char *moduleSpec, char ***children, 
+secmod_ParseModuleSpecForTokens(PRBool convert, PRBool isFIPS,
+				const char *moduleSpec, char ***children,
 				CK_SLOT_ID **ids)
 {
     int        newSpecLen   = PORT_Strlen(moduleSpec)+2;
     char       *newSpec     = PORT_Alloc(newSpecLen);
     char       *newSpecPtr  = newSpec;
-    char       *modulePrev  = moduleSpec;
+    const char       *modulePrev  = moduleSpec;
     char       *target      = NULL;
     char *tmp = NULL;
     char       **childArray = NULL;
-    char       *tokenIndex;
+    const char       *tokenIndex;
     CK_SLOT_ID *idArray     = NULL;
     int        tokenCount = 0;
     int        i;
@@ -346,7 +850,7 @@ secmod_ParseModuleSpecForTokens(PRBool convert, PRBool isFIPS,
     if (ids) {
 	*ids = NULL;
     }
-    moduleSpec = secmod_argStrip(moduleSpec);
+    moduleSpec = NSSUTIL_ArgStrip(moduleSpec);
     SECMOD_SPEC_COPY(newSpecPtr, modulePrev, moduleSpec);
 
     /* Notes on 'convert' and 'isFIPS' flags: The base parameters for opening 
@@ -378,13 +882,13 @@ secmod_ParseModuleSpecForTokens(PRBool convert, PRBool isFIPS,
     while (*moduleSpec) {
 	int next;
 	modulePrev = moduleSpec;
-	SECMOD_HANDLE_STRING_ARG(moduleSpec, target, "tokens=",
+	NSSUTIL_HANDLE_STRING_ARG(moduleSpec, target, "tokens=",
 			modulePrev = moduleSpec; /* skip copying */ )
-	SECMOD_HANDLE_STRING_ARG(moduleSpec, tmp, "cryptoTokenDescription=",
+	NSSUTIL_HANDLE_STRING_ARG(moduleSpec, tmp, "cryptoTokenDescription=",
 			if (convert) { modulePrev = moduleSpec; } );
-	SECMOD_HANDLE_STRING_ARG(moduleSpec, tmp, "cryptoSlotDescription=",
+	NSSUTIL_HANDLE_STRING_ARG(moduleSpec, tmp, "cryptoSlotDescription=",
 			if (convert) { modulePrev = moduleSpec; } );
-	SECMOD_HANDLE_STRING_ARG(moduleSpec, tmp, "dbTokenDescription=",
+	NSSUTIL_HANDLE_STRING_ARG(moduleSpec, tmp, "dbTokenDescription=",
 			if (convert) {
 			    modulePrev = moduleSpec; 
 			    if (!isFIPS) {
@@ -393,7 +897,7 @@ secmod_ParseModuleSpecForTokens(PRBool convert, PRBool isFIPS,
 				    sizeof(SECMOD_TOKEN_DESCRIPTION)-1, tmp);
 			    }
 			});
-	SECMOD_HANDLE_STRING_ARG(moduleSpec, tmp, "dbSlotDescription=",
+	NSSUTIL_HANDLE_STRING_ARG(moduleSpec, tmp, "dbSlotDescription=",
 			if (convert) {
 			    modulePrev = moduleSpec; /* skip copying */ 
 			    if (!isFIPS) {
@@ -402,7 +906,7 @@ secmod_ParseModuleSpecForTokens(PRBool convert, PRBool isFIPS,
 				    sizeof(SECMOD_SLOT_DESCRIPTION)-1, tmp);
 			    }
 			} );
-	SECMOD_HANDLE_STRING_ARG(moduleSpec, tmp, "FIPSTokenDescription=",
+	NSSUTIL_HANDLE_STRING_ARG(moduleSpec, tmp, "FIPSTokenDescription=",
 			if (convert) {
 			    modulePrev = moduleSpec; /* skip copying */ 
 			    if (isFIPS) {
@@ -411,7 +915,7 @@ secmod_ParseModuleSpecForTokens(PRBool convert, PRBool isFIPS,
 				    sizeof(SECMOD_TOKEN_DESCRIPTION)-1, tmp);
 			    }
 			} );
-	SECMOD_HANDLE_STRING_ARG(moduleSpec, tmp, "FIPSSlotDescription=",
+	NSSUTIL_HANDLE_STRING_ARG(moduleSpec, tmp, "FIPSSlotDescription=",
 			if (convert) {
 			    modulePrev = moduleSpec; /* skip copying */ 
 			    if (isFIPS) {
@@ -420,7 +924,7 @@ secmod_ParseModuleSpecForTokens(PRBool convert, PRBool isFIPS,
 				    sizeof(SECMOD_SLOT_DESCRIPTION)-1, tmp);
 			    }
 			} );
-	SECMOD_HANDLE_FINAL_ARG(moduleSpec)
+	NSSUTIL_HANDLE_FINAL_ARG(moduleSpec)
 	SECMOD_SPEC_COPY(newSpecPtr, modulePrev, moduleSpec);
     }
     if (tmp) {
@@ -436,8 +940,8 @@ secmod_ParseModuleSpecForTokens(PRBool convert, PRBool isFIPS,
 
     /* now build the child array from target */
     /*first count them */
-    for (tokenIndex = secmod_argStrip(target); *tokenIndex;
-	tokenIndex = secmod_argStrip(secmod_argSkipParameter(tokenIndex))) {
+    for (tokenIndex = NSSUTIL_ArgStrip(target); *tokenIndex;
+	tokenIndex = NSSUTIL_ArgStrip(NSSUTIL_ArgSkipParameter(tokenIndex))) {
 	tokenCount++;
     }
 
@@ -457,22 +961,22 @@ secmod_ParseModuleSpecForTokens(PRBool convert, PRBool isFIPS,
     }
 
     /* now fill them in */
-    for (tokenIndex = secmod_argStrip(target), i=0 ; 
+    for (tokenIndex = NSSUTIL_ArgStrip(target), i=0 ; 
 			*tokenIndex && (i < tokenCount); 
-			tokenIndex=secmod_argStrip(tokenIndex)) {
+			tokenIndex=NSSUTIL_ArgStrip(tokenIndex)) {
 	int next;
-	char *name = secmod_argGetName(tokenIndex, &next);
+	char *name = NSSUTIL_ArgGetLabel(tokenIndex, &next);
 	tokenIndex += next;
 
  	if (idArray) {
-	   idArray[i] = secmod_argDecodeNumber(name);
+	   idArray[i] = NSSUTIL_ArgDecodeNumber(name);
 	}
 
 	PORT_Free(name); /* drop the explicit number */
 
 	/* if anything is left, copy the args to the child array */
-	if (!secmod_argIsBlank(*tokenIndex)) {
-	    childArray[i++] = secmod_argFetchValue(tokenIndex, &next);
+	if (!NSSUTIL_ArgIsBlank(*tokenIndex)) {
+	    childArray[i++] = NSSUTIL_ArgFetchValue(tokenIndex, &next);
 	    tokenIndex += next;
 	}
     }
@@ -493,22 +997,22 @@ secmod_ParseModuleSpecForTokens(PRBool convert, PRBool isFIPS,
 
 /* get the database and flags from the spec */
 static char *
-secmod_getConfigDir(char *spec, char **certPrefix, char **keyPrefix,
+secmod_getConfigDir(const char *spec, char **certPrefix, char **keyPrefix,
 			  PRBool *readOnly)
 {
     char * config = NULL;
 
     *certPrefix = NULL;
     *keyPrefix = NULL;
-    *readOnly = secmod_argHasFlag("flags","readOnly",spec);
+    *readOnly = NSSUTIL_ArgHasFlag("flags","readOnly",spec);
 
-    spec = secmod_argStrip(spec);
+    spec = NSSUTIL_ArgStrip(spec);
     while (*spec) {
 	int next;
-	SECMOD_HANDLE_STRING_ARG(spec, config, "configdir=", ;)
-	SECMOD_HANDLE_STRING_ARG(spec, *certPrefix, "certPrefix=", ;)
-	SECMOD_HANDLE_STRING_ARG(spec, *keyPrefix, "keyPrefix=", ;)
-	SECMOD_HANDLE_FINAL_ARG(spec)
+	NSSUTIL_HANDLE_STRING_ARG(spec, config, "configdir=", ;)
+	NSSUTIL_HANDLE_STRING_ARG(spec, *certPrefix, "certPrefix=", ;)
+	NSSUTIL_HANDLE_STRING_ARG(spec, *keyPrefix, "keyPrefix=", ;)
+	NSSUTIL_HANDLE_FINAL_ARG(spec)
     }
     return config;
 }
@@ -583,7 +1087,7 @@ secmod_configIsDBM(char *configDir)
 	|| (strncmp(configDir, "extern:", 7) == 0)) {
 	return PR_FALSE;
     }
-    env = PR_GetEnv("NSS_DEFAULT_DB_TYPE");
+    env = PR_GetEnvSecure("NSS_DEFAULT_DB_TYPE");
     /* implicit dbm open */
     if ((env == NULL) || (strcmp(env,"dbm") == 0)) {
 	return PR_TRUE;
@@ -689,86 +1193,6 @@ secmod_FreeChildren(char **children, CK_SLOT_ID *ids)
     return;
 }
 
-
-static int
-secmod_escapeSize(const char *string, char quote)
-{
-    int escapes = 0, size = 0;
-    const char *src;
-    for (src=string; *src ; src++) {
-        if ((*src == quote) || (*src == '\\')) escapes++;
-        size++;
-    }
-
-    return escapes+size+1;
-}
-
-
-/*
- * add escapes to protect quote characters...
- */
-static char *
-secmod_addEscape(const char *string, char quote)
-{
-    char *newString = 0;
-    int size = 0;
-    const char *src;
-    char *dest;
-
-
-    size = secmod_escapeSize(string,quote);
-    newString = PORT_ZAlloc(size);
-    if (newString == NULL) {
-        return NULL;
-    }
-
-    for (src=string, dest=newString; *src; src++,dest++) {
-        if ((*src == '\\') || (*src == quote)) {
-            *dest++ = '\\';
-        }
-        *dest = *src;
-    }
-
-    return newString;
-}
-
-static int
-secmod_doubleEscapeSize(const char *string, char quote1, char quote2)
-{
-    int escapes = 0, size = 0;
-    const char *src;
-    for (src=string; *src ; src++) {
-        if (*src == '\\')   escapes+=3; /* \\\\ */
-        if (*src == quote1) escapes+=2; /* \\quote1 */
-        if (*src == quote2) escapes++;   /* \quote2 */
-        size++;
-    }
-
-    return escapes+size+1;
-}
-
-char *
-secmod_DoubleEscape(const char *string, char quote1, char quote2)
-{
-    char *round1 = NULL;
-    char *retValue = NULL;
-    if (string == NULL) {
-        goto done;
-    }
-    round1 = secmod_addEscape(string,quote1);
-    if (round1) {
-        retValue = secmod_addEscape(round1,quote2);
-        PORT_Free(round1);
-    }
-
-done:
-    if (retValue == NULL) {
-        retValue = PORT_Strdup("");
-    }
-    return retValue;
-}
-
-
 /*
  * caclulate the length of each child record:
  * " 0x{id}=<{escaped_child}>"
@@ -776,7 +1200,7 @@ done:
 static int
 secmod_getChildLength(char *child, CK_SLOT_ID id)
 {
-    int length = secmod_doubleEscapeSize(child, '>', ']');
+    int length = NSSUTIL_DoubleEscapeSize(child, '>', ']');
     if (id == 0) {
 	length++;
     }
@@ -804,7 +1228,7 @@ secmod_mkTokenChild(char **next, int *length, char *child, CK_SLOT_ID id)
     }
     *next += len;
     *length -= len;
-    escSpec = secmod_DoubleEscape(child, '>', ']');
+    escSpec = NSSUTIL_DoubleEscape(child, '>', ']');
     if (escSpec == NULL) {
 	return SECFailure;
     }
@@ -830,7 +1254,7 @@ secmod_mkTokenChild(char **next, int *length, char *child, CK_SLOT_ID id)
 #define TOKEN_STRING " tokens=["
 
 char *
-secmod_MkAppendTokensList(PRArenaPool *arena, char *oldParam, char *newToken, 
+secmod_MkAppendTokensList(PLArenaPool *arena, char *oldParam, char *newToken,
 			CK_SLOT_ID newID, char **children, CK_SLOT_ID *ids)
 {
     char *rawParam = NULL;	/* oldParam with tokens stripped off */
@@ -970,7 +1394,7 @@ secmod_mkModuleSpec(SECMODModule * module)
 	    if (module->slots[i]->defaultFlags) {
 		PORT_Assert(si < slotCount);
 		if (si >= slotCount) break;
-		slotStrings[si] = secmod_mkSlotString(module->slots[i]->slotID,
+		slotStrings[si] = NSSUTIL_MkSlotString(module->slots[i]->slotID,
 			module->slots[i]->defaultFlags,
 			module->slots[i]->timeout,
 			module->slots[i]->askpw,
@@ -981,7 +1405,8 @@ secmod_mkModuleSpec(SECMODModule * module)
 	}
      } else {
 	for (i=0; i < slotCount; i++) {
-		slotStrings[i] = secmod_mkSlotString(module->slotInfo[i].slotID,
+		slotStrings[i] = NSSUTIL_MkSlotString(
+			module->slotInfo[i].slotID,
 			module->slotInfo[i].defaultFlags,
 			module->slotInfo[i].timeout,
 			module->slotInfo[i].askpw,
@@ -991,11 +1416,12 @@ secmod_mkModuleSpec(SECMODModule * module)
     }
 
     SECMOD_ReleaseReadLock(moduleLock);
-    nss = secmod_mkNSS(slotStrings,slotCount,module->internal, module->isFIPS,
-		       module->isModuleDB, module->moduleDBOnly, 
-		       module->isCritical, module->trustOrder,
-		       module->cipherOrder,module->ssl[0],module->ssl[1]);
-    modSpec= secmod_mkNewModuleSpec(module->dllName,module->commonName,
+    nss = NSSUTIL_MkNSSString(slotStrings,slotCount,module->internal, 
+		       module->isFIPS, module->isModuleDB,
+		       module->moduleDBOnly, module->isCritical,
+		       module->trustOrder, module->cipherOrder,
+		       module->ssl[0],module->ssl[1]);
+    modSpec= NSSUTIL_MkModuleSpec(module->dllName,module->commonName,
 						module->libraryParams,nss);
     PORT_Free(slotStrings);
     PR_smprintf_free(nss);
@@ -1075,6 +1501,7 @@ SECMODModule *
 SECMOD_LoadModule(char *modulespec,SECMODModule *parent, PRBool recurse)
 {
     char *library = NULL, *moduleName = NULL, *parameters = NULL, *nss= NULL;
+    char *config = NULL;
     SECStatus status;
     SECMODModule *module = NULL;
     SECMODModule *oldModule = NULL;
@@ -1083,17 +1510,19 @@ SECMOD_LoadModule(char *modulespec,SECMODModule *parent, PRBool recurse)
     /* initialize the underlying module structures */
     SECMOD_Init();
 
-    status = secmod_argParseModuleSpec(modulespec, &library, &moduleName, 
-							&parameters, &nss);
+    status = NSSUTIL_ArgParseModuleSpecEx(modulespec, &library, &moduleName, 
+							&parameters, &nss,
+							&config);
     if (status != SECSuccess) {
 	goto loser;
     }
 
-    module = SECMOD_CreateModule(library, moduleName, parameters, nss);
+    module = SECMOD_CreateModuleEx(library, moduleName, parameters, nss, config);
     if (library) PORT_Free(library);
     if (moduleName) PORT_Free(moduleName);
     if (parameters) PORT_Free(parameters);
     if (nss) PORT_Free(nss);
+    if (config) PORT_Free(config);
     if (!module) {
 	goto loser;
     }

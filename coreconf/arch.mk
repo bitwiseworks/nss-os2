@@ -1,40 +1,7 @@
 #
-# ***** BEGIN LICENSE BLOCK *****
-# Version: MPL 1.1/GPL 2.0/LGPL 2.1
-#
-# The contents of this file are subject to the Mozilla Public License Version
-# 1.1 (the "License"); you may not use this file except in compliance with
-# the License. You may obtain a copy of the License at
-# http://www.mozilla.org/MPL/
-#
-# Software distributed under the License is distributed on an "AS IS" basis,
-# WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
-# for the specific language governing rights and limitations under the
-# License.
-#
-# The Original Code is the Netscape security libraries.
-#
-# The Initial Developer of the Original Code is
-# Netscape Communications Corporation.
-# Portions created by the Initial Developer are Copyright (C) 1994-2000
-# the Initial Developer. All Rights Reserved.
-#
-# Contributor(s):
-# 		Howard Chu <hyc@symas.com>
-#
-# Alternatively, the contents of this file may be used under the terms of
-# either the GNU General Public License Version 2 or later (the "GPL"), or
-# the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
-# in which case the provisions of the GPL or the LGPL are applicable instead
-# of those above. If you wish to allow use of your version of this file only
-# under the terms of either the GPL or the LGPL, and not to allow others to
-# use your version of this file under the terms of the MPL, indicate your
-# decision by deleting the provisions above and replace them with the notice
-# and other provisions required by the GPL or the LGPL. If you do not delete
-# the provisions above, a recipient may use your version of this file under
-# the terms of any one of the MPL, the GPL or the LGPL.
-#
-# ***** END LICENSE BLOCK *****
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 #######################################################################
 # Master "Core Components" macros for getting the OS architecture     #
@@ -179,34 +146,8 @@ endif
 # uses fibers).
 #
 # If OS_TARGET is not specified, it defaults to $(OS_ARCH), i.e., no
-# cross-compilation.
+# cross-compilation, except on Windows, where it defaults to WIN95.
 #
-
-#
-# The following hack allows one to build on a WIN95 machine (as if
-# s/he were cross-compiling on a WINNT host for a WIN95 target).
-# It also accomodates for MKS's and Cygwin's uname.exe.
-#
-ifeq ($(OS_ARCH),WIN95)
-    OS_ARCH   = WINNT
-    OS_TARGET = WIN95
-endif
-ifeq ($(OS_ARCH),Windows_95)
-    OS_ARCH   = Windows_NT
-    OS_TARGET = WIN95
-endif
-ifeq ($(OS_ARCH),CYGWIN_95-4.0)
-	OS_ARCH   = CYGWIN_NT-4.0
-	OS_TARGET = WIN95
-endif
-ifeq ($(OS_ARCH),CYGWIN_98-4.10)
-	OS_ARCH   = CYGWIN_NT-4.0
-	OS_TARGET = WIN95
-endif
-ifeq ($(OS_ARCH),CYGWIN_ME-4.90)
-	OS_ARCH   = CYGWIN_NT-4.0
-	OS_TARGET = WIN95
-endif
 
 #
 # On WIN32, we also define the variable CPU_ARCH, if it isn't already.
@@ -244,7 +185,7 @@ ifeq ($(OS_ARCH), Windows_NT)
     endif
 endif
 #
-# If uname -s returns "CYGWIN_NT-4.0", we assume that we are using
+# If uname -s returns "CYGWIN_NT-*", we assume that we are using
 # the uname.exe in the Cygwin tools.
 #
 ifeq (CYGWIN_NT,$(findstring CYGWIN_NT,$(OS_ARCH)))
@@ -264,7 +205,7 @@ ifeq (CYGWIN_NT,$(findstring CYGWIN_NT,$(OS_ARCH)))
     endif
 endif
 #
-# If uname -s returns "MINGW32_NT-5.1", we assume that we are using
+# If uname -s returns "MINGW32_NT-*", we assume that we are using
 # the uname.exe in the MSYS toolkit.
 #
 ifeq (MINGW32_NT,$(findstring MINGW32_NT,$(OS_ARCH)))
@@ -282,8 +223,23 @@ ifeq (MINGW32_NT,$(findstring MINGW32_NT,$(OS_ARCH)))
     endif
 endif
 
+ifeq ($(OS_TARGET),Android)
+#
+# this should be  configurable from the user
+#
+   OS_TEST := arm
+   OS_ARCH = Android
+   ifndef OS_TARGET_RELEASE
+	OS_TARGET_RELEASE := 8
+   endif
+endif
+
 ifndef OS_TARGET
+ifeq ($(OS_ARCH), WINNT)
+    OS_TARGET = WIN95
+else
     OS_TARGET = $(OS_ARCH)
+endif
 endif
 
 ifeq ($(OS_TARGET), WIN95)
@@ -324,7 +280,12 @@ endif
 # IMPL_STRATEGY may be defined too.
 #
 
+ifdef CROSS_COMPILE
+OBJDIR_NAME = $(OS_TARGET)$(OS_RELEASE)$(CPU_TAG)$(LIBC_TAG)$(IMPL_STRATEGY)$(OBJDIR_TAG).OBJ
+else
 OBJDIR_NAME = $(OS_TARGET)$(OS_RELEASE)$(CPU_TAG)$(COMPILER_TAG)$(LIBC_TAG)$(IMPL_STRATEGY)$(OBJDIR_TAG).OBJ
+endif
+
 
 ifeq (,$(filter-out WIN%,$(OS_TARGET)))
 ifndef BUILD_OPT
@@ -333,7 +294,11 @@ ifndef BUILD_OPT
 # (RTL) in the debug build
 #
 ifdef USE_DEBUG_RTL
+    ifdef CROSS_COMPILE
+    OBJDIR_NAME = $(OS_TARGET)$(OS_RELEASE)$(CPU_TAG)$(IMPL_STRATEGY)$(OBJDIR_TAG).OBJD
+    else
     OBJDIR_NAME = $(OS_TARGET)$(OS_RELEASE)$(CPU_TAG)$(COMPILER_TAG)$(IMPL_STRATEGY)$(OBJDIR_TAG).OBJD
+    endif
 endif
 endif
 endif

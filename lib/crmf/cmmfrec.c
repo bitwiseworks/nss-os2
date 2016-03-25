@@ -1,42 +1,10 @@
 /* -*- Mode: C; tab-width: 8 -*-*/
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Netscape security libraries.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1994-2000
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
- * This file will implement the functions related to key recovery in 
+ * This file will implement the functions related to key recovery in
  * CMMF
  */
 
@@ -45,10 +13,10 @@
 #include "secitem.h"
 #include "keyhi.h"
 
-CMMFKeyRecRepContent*
+CMMFKeyRecRepContent *
 CMMF_CreateKeyRecRepContent(void)
 {
-    PRArenaPool          *poolp;
+    PLArenaPool *poolp;
     CMMFKeyRecRepContent *keyRecContent;
 
     poolp = PORT_NewArena(CRMF_DEFAULT_ARENA_SIZE);
@@ -58,7 +26,7 @@ CMMF_CreateKeyRecRepContent(void)
     keyRecContent = PORT_ArenaZNew(poolp, CMMFKeyRecRepContent);
     if (keyRecContent == NULL) {
         PORT_FreeArena(poolp, PR_FALSE);
-	return NULL;
+        return NULL;
     }
     keyRecContent->poolp = poolp;
     return keyRecContent;
@@ -69,25 +37,24 @@ CMMF_DestroyKeyRecRepContent(CMMFKeyRecRepContent *inKeyRecRep)
 {
     PORT_Assert(inKeyRecRep != NULL);
     if (inKeyRecRep != NULL && inKeyRecRep->poolp != NULL) {
-	int i;
+        int i;
 
-	if (!inKeyRecRep->isDecoded && inKeyRecRep->newSigCert != NULL) {
-	    CERT_DestroyCertificate(inKeyRecRep->newSigCert);
-	}
-	if (inKeyRecRep->caCerts != NULL) {
-	    for (i=0; inKeyRecRep->caCerts[i] != NULL; i++) {
-		CERT_DestroyCertificate(inKeyRecRep->caCerts[i]);
-	    }
-	}
-	if (inKeyRecRep->keyPairHist != NULL) {
-	    for (i=0; inKeyRecRep->keyPairHist[i] != NULL; i++) {
-	        if (inKeyRecRep->keyPairHist[i]->certOrEncCert.choice ==
-			cmmfCertificate) {
-		    CERT_DestroyCertificate(inKeyRecRep->keyPairHist[i]->
-					       certOrEncCert.cert.certificate);
-		}
-	    }
-	}
+        if (!inKeyRecRep->isDecoded && inKeyRecRep->newSigCert != NULL) {
+            CERT_DestroyCertificate(inKeyRecRep->newSigCert);
+        }
+        if (inKeyRecRep->caCerts != NULL) {
+            for (i = 0; inKeyRecRep->caCerts[i] != NULL; i++) {
+                CERT_DestroyCertificate(inKeyRecRep->caCerts[i]);
+            }
+        }
+        if (inKeyRecRep->keyPairHist != NULL) {
+            for (i = 0; inKeyRecRep->keyPairHist[i] != NULL; i++) {
+                if (inKeyRecRep->keyPairHist[i]->certOrEncCert.choice ==
+                    cmmfCertificate) {
+                    CERT_DestroyCertificate(inKeyRecRep->keyPairHist[i]->certOrEncCert.cert.certificate);
+                }
+            }
+        }
         PORT_FreeArena(inKeyRecRep->poolp, PR_TRUE);
     }
     return SECSuccess;
@@ -95,49 +62,49 @@ CMMF_DestroyKeyRecRepContent(CMMFKeyRecRepContent *inKeyRecRep)
 
 SECStatus
 CMMF_KeyRecRepContentSetPKIStatusInfoStatus(CMMFKeyRecRepContent *inKeyRecRep,
-					    CMMFPKIStatus         inPKIStatus)
+                                            CMMFPKIStatus inPKIStatus)
 {
     PORT_Assert(inKeyRecRep != NULL && inPKIStatus >= cmmfGranted &&
-		inPKIStatus < cmmfNumPKIStatus);
+                inPKIStatus < cmmfNumPKIStatus);
     if (inKeyRecRep == NULL) {
         return SECFailure;
     }
-    
-    return cmmf_PKIStatusInfoSetStatus(&inKeyRecRep->status, 
-				       inKeyRecRep->poolp,
-				       inPKIStatus);
+
+    return cmmf_PKIStatusInfoSetStatus(&inKeyRecRep->status,
+                                       inKeyRecRep->poolp,
+                                       inPKIStatus);
 }
 
 SECStatus
 CMMF_KeyRecRepContentSetNewSignCert(CMMFKeyRecRepContent *inKeyRecRep,
-				    CERTCertificate      *inNewSignCert)
+                                    CERTCertificate *inNewSignCert)
 {
-    PORT_Assert (inKeyRecRep != NULL && inNewSignCert != NULL);
+    PORT_Assert(inKeyRecRep != NULL && inNewSignCert != NULL);
     if (inKeyRecRep == NULL || inNewSignCert == NULL) {
         return SECFailure;
     }
     if (!inKeyRecRep->isDecoded && inKeyRecRep->newSigCert) {
-	CERT_DestroyCertificate(inKeyRecRep->newSigCert);
+        CERT_DestroyCertificate(inKeyRecRep->newSigCert);
     }
     inKeyRecRep->isDecoded = PR_FALSE;
     inKeyRecRep->newSigCert = CERT_DupCertificate(inNewSignCert);
-    return (inKeyRecRep->newSigCert == NULL) ? SECFailure : SECSuccess;    
+    return (inKeyRecRep->newSigCert == NULL) ? SECFailure : SECSuccess;
 }
 
 SECStatus
 CMMF_KeyRecRepContentSetCACerts(CMMFKeyRecRepContent *inKeyRecRep,
-				CERTCertList         *inCACerts)
+                                CERTCertList *inCACerts)
 {
     SECStatus rv;
     void *mark;
 
-    PORT_Assert (inKeyRecRep != NULL && inCACerts != NULL);
+    PORT_Assert(inKeyRecRep != NULL && inCACerts != NULL);
     if (inKeyRecRep == NULL || inCACerts == NULL) {
         return SECFailure;
     }
     mark = PORT_ArenaMark(inKeyRecRep->poolp);
     rv = cmmf_ExtractCertsFromList(inCACerts, inKeyRecRep->poolp,
-				   &inKeyRecRep->caCerts);
+                                   &inKeyRecRep->caCerts);
     if (rv != SECSuccess) {
         PORT_ArenaRelease(inKeyRecRep->poolp, mark);
     } else {
@@ -148,49 +115,49 @@ CMMF_KeyRecRepContentSetCACerts(CMMFKeyRecRepContent *inKeyRecRep,
 
 SECStatus
 CMMF_KeyRecRepContentSetCertifiedKeyPair(CMMFKeyRecRepContent *inKeyRecRep,
-					 CERTCertificate      *inCert,
-					 SECKEYPrivateKey     *inPrivKey,
-					 SECKEYPublicKey      *inPubKey)
+                                         CERTCertificate *inCert,
+                                         SECKEYPrivateKey *inPrivKey,
+                                         SECKEYPublicKey *inPubKey)
 {
     CMMFCertifiedKeyPair *keyPair;
-    CRMFEncryptedValue   *dummy;
-    PRArenaPool          *poolp;
-    void                 *mark;
-    SECStatus             rv;
+    CRMFEncryptedValue *dummy;
+    PLArenaPool *poolp;
+    void *mark;
+    SECStatus rv;
 
-    PORT_Assert (inKeyRecRep != NULL &&
-		 inCert      != NULL &&
-		 inPrivKey   != NULL &&
-		 inPubKey    != NULL);
+    PORT_Assert(inKeyRecRep != NULL &&
+                inCert != NULL &&
+                inPrivKey != NULL &&
+                inPubKey != NULL);
     if (inKeyRecRep == NULL ||
-	inCert      == NULL ||
-	inPrivKey   == NULL ||
-	inPubKey    == NULL) {
+        inCert == NULL ||
+        inPrivKey == NULL ||
+        inPubKey == NULL) {
         return SECFailure;
     }
     poolp = inKeyRecRep->poolp;
     mark = PORT_ArenaMark(poolp);
     if (inKeyRecRep->keyPairHist == NULL) {
-        inKeyRecRep->keyPairHist = PORT_ArenaNewArray(poolp, 
-						      CMMFCertifiedKeyPair*,
-						      (CMMF_MAX_KEY_PAIRS+1));
-	if (inKeyRecRep->keyPairHist == NULL) {
-	    goto loser;
-	}
-	inKeyRecRep->allocKeyPairs = CMMF_MAX_KEY_PAIRS;
-	inKeyRecRep->numKeyPairs   = 0;
+        inKeyRecRep->keyPairHist = PORT_ArenaNewArray(poolp,
+                                                      CMMFCertifiedKeyPair *,
+                                                      (CMMF_MAX_KEY_PAIRS + 1));
+        if (inKeyRecRep->keyPairHist == NULL) {
+            goto loser;
+        }
+        inKeyRecRep->allocKeyPairs = CMMF_MAX_KEY_PAIRS;
+        inKeyRecRep->numKeyPairs = 0;
     }
 
     if (inKeyRecRep->allocKeyPairs == inKeyRecRep->numKeyPairs) {
         goto loser;
     }
-    
+
     keyPair = PORT_ArenaZNew(poolp, CMMFCertifiedKeyPair);
     if (keyPair == NULL) {
         goto loser;
     }
     rv = cmmf_CertOrEncCertSetCertificate(&keyPair->certOrEncCert,
-					  poolp, inCert);
+                                          poolp, inCert);
     if (rv != SECSuccess) {
         goto loser;
     }
@@ -198,12 +165,12 @@ CMMF_KeyRecRepContentSetCertifiedKeyPair(CMMFKeyRecRepContent *inKeyRecRep,
     if (keyPair->privateKey == NULL) {
         goto loser;
     }
-    dummy = crmf_create_encrypted_value_wrapped_privkey(inPrivKey, inPubKey, 
-							keyPair->privateKey);
+    dummy = crmf_create_encrypted_value_wrapped_privkey(inPrivKey, inPubKey,
+                                                        keyPair->privateKey);
     PORT_Assert(dummy == keyPair->privateKey);
     if (dummy != keyPair->privateKey) {
         crmf_destroy_encrypted_value(dummy, PR_TRUE);
-	goto loser;
+        goto loser;
     }
     inKeyRecRep->keyPairHist[inKeyRecRep->numKeyPairs] = keyPair;
     inKeyRecRep->numKeyPairs++;
@@ -211,7 +178,7 @@ CMMF_KeyRecRepContentSetCertifiedKeyPair(CMMFKeyRecRepContent *inKeyRecRep,
     PORT_ArenaUnmark(poolp, mark);
     return SECSuccess;
 
- loser:
+loser:
     PORT_ArenaRelease(poolp, mark);
     return SECFailure;
 }
@@ -226,12 +193,12 @@ CMMF_KeyRecRepContentGetPKIStatusInfoStatus(CMMFKeyRecRepContent *inKeyRecRep)
     return cmmf_PKIStatusInfoGetStatus(&inKeyRecRep->status);
 }
 
-CERTCertificate*
+CERTCertificate *
 CMMF_KeyRecRepContentGetNewSignCert(CMMFKeyRecRepContent *inKeyRecRep)
 {
     PORT_Assert(inKeyRecRep != NULL);
-    if (inKeyRecRep             == NULL ||
-	inKeyRecRep->newSigCert == NULL) {
+    if (inKeyRecRep == NULL ||
+        inKeyRecRep->newSigCert == NULL) {
         return NULL;
     }
     /* newSigCert may not be a real certificate, it may be a hand decoded
@@ -240,12 +207,12 @@ CMMF_KeyRecRepContentGetNewSignCert(CMMFKeyRecRepContent *inKeyRecRep)
      * portion so that we never wind up with a half formed CERTCertificate
      * here. In this case the call would be to CERT_DupCertificate.
      */
-    return CERT_NewTempCertificate(CERT_GetDefaultCertDB(), 
-			          &inKeyRecRep->newSigCert->signatureWrap.data,
-				   NULL, PR_FALSE, PR_TRUE);
+    return CERT_NewTempCertificate(CERT_GetDefaultCertDB(),
+                                   &inKeyRecRep->newSigCert->signatureWrap.data,
+                                   NULL, PR_FALSE, PR_TRUE);
 }
 
-CERTCertList*
+CERTCertList *
 CMMF_KeyRecRepContentGetCACerts(CMMFKeyRecRepContent *inKeyRecRep)
 {
     PORT_Assert(inKeyRecRep != NULL);
@@ -255,7 +222,7 @@ CMMF_KeyRecRepContentGetCACerts(CMMFKeyRecRepContent *inKeyRecRep)
     return cmmf_MakeCertList(inKeyRecRep->caCerts);
 }
 
-int 
+int
 CMMF_KeyRecRepContentGetNumKeyPairs(CMMFKeyRecRepContent *inKeyRecRep)
 {
     PORT_Assert(inKeyRecRep != NULL);
@@ -264,87 +231,86 @@ CMMF_KeyRecRepContentGetNumKeyPairs(CMMFKeyRecRepContent *inKeyRecRep)
 
 PRBool
 cmmf_KeyRecRepContentIsValidIndex(CMMFKeyRecRepContent *inKeyRecRep,
-				  int                   inIndex)
+                                  int inIndex)
 {
     int numKeyPairs = CMMF_KeyRecRepContentGetNumKeyPairs(inKeyRecRep);
-    
+
     return (PRBool)(inIndex >= 0 && inIndex < numKeyPairs);
 }
 
-CMMFCertifiedKeyPair*
+CMMFCertifiedKeyPair *
 CMMF_KeyRecRepContentGetCertKeyAtIndex(CMMFKeyRecRepContent *inKeyRecRep,
-				       int                   inIndex)
+                                       int inIndex)
 {
     CMMFCertifiedKeyPair *newKeyPair;
-    SECStatus             rv;
+    SECStatus rv;
 
     PORT_Assert(inKeyRecRep != NULL &&
-		cmmf_KeyRecRepContentIsValidIndex(inKeyRecRep, inIndex));
+                cmmf_KeyRecRepContentIsValidIndex(inKeyRecRep, inIndex));
     if (inKeyRecRep == NULL ||
-	!cmmf_KeyRecRepContentIsValidIndex(inKeyRecRep, inIndex)) {
+        !cmmf_KeyRecRepContentIsValidIndex(inKeyRecRep, inIndex)) {
         return NULL;
     }
     newKeyPair = PORT_ZNew(CMMFCertifiedKeyPair);
     if (newKeyPair == NULL) {
         return NULL;
     }
-    rv = cmmf_CopyCertifiedKeyPair(NULL, newKeyPair, 
-				   inKeyRecRep->keyPairHist[inIndex]);
+    rv = cmmf_CopyCertifiedKeyPair(NULL, newKeyPair,
+                                   inKeyRecRep->keyPairHist[inIndex]);
     if (rv != SECSuccess) {
         CMMF_DestroyCertifiedKeyPair(newKeyPair);
-	newKeyPair = NULL;
+        newKeyPair = NULL;
     }
     return newKeyPair;
 }
 
-SECStatus 
+SECStatus
 CMMF_CertifiedKeyPairUnwrapPrivKey(CMMFCertifiedKeyPair *inKeyPair,
-				   SECKEYPrivateKey     *inPrivKey,
-				   SECItem              *inNickName,
-				   PK11SlotInfo         *inSlot,
-				   CERTCertDBHandle     *inCertdb,
-				   SECKEYPrivateKey    **destPrivKey,
-				   void                 *wincx)
+                                   SECKEYPrivateKey *inPrivKey,
+                                   SECItem *inNickName,
+                                   PK11SlotInfo *inSlot,
+                                   CERTCertDBHandle *inCertdb,
+                                   SECKEYPrivateKey **destPrivKey,
+                                   void *wincx)
 {
     CERTCertificate *cert;
-    SECItem keyUsageValue = {siBuffer, NULL, 0};
+    SECItem keyUsageValue = { siBuffer, NULL, 0 };
     unsigned char keyUsage = 0x0;
     SECKEYPublicKey *pubKey;
     SECStatus rv;
 
     PORT_Assert(inKeyPair != NULL &&
-		inPrivKey != NULL && inCertdb != NULL);
-    if (inKeyPair             == NULL ||
-	inPrivKey             == NULL ||
-	inKeyPair->privateKey == NULL ||
-	inCertdb              == NULL) {
+                inPrivKey != NULL && inCertdb != NULL);
+    if (inKeyPair == NULL ||
+        inPrivKey == NULL ||
+        inKeyPair->privateKey == NULL ||
+        inCertdb == NULL) {
         return SECFailure;
     }
-    
+
     cert = CMMF_CertifiedKeyPairGetCertificate(inKeyPair, inCertdb);
     CERT_FindKeyUsageExtension(cert, &keyUsageValue);
     if (keyUsageValue.data != NULL) {
         keyUsage = keyUsageValue.data[3];
-	PORT_Free(keyUsageValue.data);
+        PORT_Free(keyUsageValue.data);
     }
     pubKey = CERT_ExtractPublicKey(cert);
     rv = crmf_encrypted_value_unwrap_priv_key(NULL, inKeyPair->privateKey,
-					      inPrivKey, pubKey, 
-					      inNickName, inSlot, keyUsage, 
-					      destPrivKey, wincx);
+                                              inPrivKey, pubKey,
+                                              inNickName, inSlot, keyUsage,
+                                              destPrivKey, wincx);
     SECKEY_DestroyPublicKey(pubKey);
     CERT_DestroyCertificate(cert);
     return rv;
 }
 
-
-PRBool 
+PRBool
 CMMF_KeyRecRepContentHasCACerts(CMMFKeyRecRepContent *inKeyRecRep)
 {
     PORT_Assert(inKeyRecRep != NULL);
     if (inKeyRecRep == NULL) {
         return PR_FALSE;
     }
-    return (PRBool)(inKeyRecRep->caCerts    != NULL && 
-		    inKeyRecRep->caCerts[0] != NULL);
+    return (PRBool)(inKeyRecRep->caCerts != NULL &&
+                    inKeyRecRep->caCerts[0] != NULL);
 }

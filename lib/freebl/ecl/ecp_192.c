@@ -1,53 +1,18 @@
-/* 
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the elliptic curve math library for prime field curves.
- *
- * The Initial Developer of the Original Code is
- * Sun Microsystems, Inc.
- * Portions created by the Initial Developer are Copyright (C) 2003
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Douglas Stebila <douglas@stebila.ca>, Sun Microsystems Laboratories
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "ecp.h"
 #include "mpi.h"
 #include "mplogic.h"
 #include "mpi-priv.h"
-#include <stdlib.h>
 
 #define ECP192_DIGITS ECL_CURVE_DIGITS(192)
 
 /* Fast modular reduction for p192 = 2^192 - 2^64 - 1.  a can be r. Uses
  * algorithm 7 from Brown, Hankerson, Lopez, Menezes. Software
  * Implementation of the NIST Elliptic Curves over Prime Fields. */
-mp_err
+static mp_err
 ec_GFp_nistp192_mod(const mp_int *a, mp_int *r, const GFMethod *meth)
 {
 	mp_err res = MP_OKAY;
@@ -107,34 +72,36 @@ ec_GFp_nistp192_mod(const mp_int *a, mp_int *r, const GFMethod *meth)
                 r0a = MP_DIGIT(a, 0);
 
 		/* implement r = (a2,a1,a0)+(a5,a5,a5)+(a4,a4,0)+(0,a3,a3) */
-		MP_ADD_CARRY(r0a, a3a, r0a, 0,    carry);
-		MP_ADD_CARRY(r0b, a3b, r0b, carry, carry);
-		MP_ADD_CARRY(r1a, a3a, r1a, carry, carry);
-		MP_ADD_CARRY(r1b, a3b, r1b, carry, carry);
-		MP_ADD_CARRY(r2a, a4a, r2a, carry, carry);
-		MP_ADD_CARRY(r2b, a4b, r2b, carry, carry);
+                carry = 0;
+		MP_ADD_CARRY(r0a, a3a, r0a, carry);
+		MP_ADD_CARRY(r0b, a3b, r0b, carry);
+		MP_ADD_CARRY(r1a, a3a, r1a, carry);
+		MP_ADD_CARRY(r1b, a3b, r1b, carry);
+		MP_ADD_CARRY(r2a, a4a, r2a, carry);
+		MP_ADD_CARRY(r2b, a4b, r2b, carry);
 		r3 = carry; carry = 0;
-		MP_ADD_CARRY(r0a, a5a, r0a, 0,     carry);
-		MP_ADD_CARRY(r0b, a5b, r0b, carry, carry);
-		MP_ADD_CARRY(r1a, a5a, r1a, carry, carry);
-		MP_ADD_CARRY(r1b, a5b, r1b, carry, carry);
-		MP_ADD_CARRY(r2a, a5a, r2a, carry, carry);
-		MP_ADD_CARRY(r2b, a5b, r2b, carry, carry);
-		r3 += carry; 
-		MP_ADD_CARRY(r1a, a4a, r1a, 0,     carry);
-		MP_ADD_CARRY(r1b, a4b, r1b, carry, carry);
-		MP_ADD_CARRY(r2a,   0, r2a, carry, carry);
-		MP_ADD_CARRY(r2b,   0, r2b, carry, carry);
+		MP_ADD_CARRY(r0a, a5a, r0a, carry);
+		MP_ADD_CARRY(r0b, a5b, r0b, carry);
+		MP_ADD_CARRY(r1a, a5a, r1a, carry);
+		MP_ADD_CARRY(r1b, a5b, r1b, carry);
+		MP_ADD_CARRY(r2a, a5a, r2a, carry);
+		MP_ADD_CARRY(r2b, a5b, r2b, carry);
+		r3 += carry; carry = 0;
+		MP_ADD_CARRY(r1a, a4a, r1a, carry);
+		MP_ADD_CARRY(r1b, a4b, r1b, carry);
+		MP_ADD_CARRY(r2a,   0, r2a, carry);
+		MP_ADD_CARRY(r2b,   0, r2b, carry);
 		r3 += carry;
 
 		/* reduce out the carry */
 		while (r3) {
-			MP_ADD_CARRY(r0a, r3, r0a, 0,     carry);
-			MP_ADD_CARRY(r0b,  0, r0b, carry, carry);
-			MP_ADD_CARRY(r1a, r3, r1a, carry, carry);
-			MP_ADD_CARRY(r1b,  0, r1b, carry, carry);
-			MP_ADD_CARRY(r2a,  0, r2a, carry, carry);
-			MP_ADD_CARRY(r2b,  0, r2b, carry, carry);
+                        carry = 0;
+			MP_ADD_CARRY(r0a, r3, r0a, carry);
+			MP_ADD_CARRY(r0b,  0, r0b, carry);
+			MP_ADD_CARRY(r1a, r3, r1a, carry);
+			MP_ADD_CARRY(r1b,  0, r1b, carry);
+			MP_ADD_CARRY(r2a,  0, r2a, carry);
+			MP_ADD_CARRY(r2b,  0, r2b, carry);
 			r3 = carry;
 		}
 
@@ -153,12 +120,14 @@ ec_GFp_nistp192_mod(const mp_int *a, mp_int *r, const GFMethod *meth)
 		if (((r2b == 0xffffffff) && (r2a == 0xffffffff) 
 			&& (r1b == 0xffffffff) ) &&
 			   ((r1a == 0xffffffff) || 
-			    (r1a == 0xfffffffe) && (r0a == 0xffffffff) &&
-					(r0b == 0xffffffff)) ) {
+			    ((r1a == 0xfffffffe) && (r0a == 0xffffffff) &&
+					(r0b == 0xffffffff))) ) {
 			/* do a quick subtract */
-			MP_ADD_CARRY(r0a, 1, r0a, 0, carry);
-			r0b += carry;
-			r1a = r1b = r2a = r2b = 0;
+                        carry = 0;
+			MP_ADD_CARRY(r0a, 1, r0a, carry);
+			MP_ADD_CARRY(r0b, carry, r0a, carry);
+			r1a += 1+carry;
+			r1b = r2a = r2b = 0;
 		}
 
 		/* set the lower words of r */
@@ -188,16 +157,17 @@ ec_GFp_nistp192_mod(const mp_int *a, mp_int *r, const GFMethod *meth)
 
 		/* implement r = (a2,a1,a0)+(a5,a5,a5)+(a4,a4,0)+(0,a3,a3) */
 #ifndef MPI_AMD64_ADD 
-		MP_ADD_CARRY(r0, a3, r0, 0,     carry);
-		MP_ADD_CARRY(r1, a3, r1, carry, carry);
-		MP_ADD_CARRY(r2, a4, r2, carry, carry);
-		r3 = carry; 
-		MP_ADD_CARRY(r0, a5, r0, 0,     carry);
-		MP_ADD_CARRY(r1, a5, r1, carry, carry);
-		MP_ADD_CARRY(r2, a5, r2, carry, carry);
-		r3 += carry; 
-		MP_ADD_CARRY(r1, a4, r1, 0,     carry);
-		MP_ADD_CARRY(r2,  0, r2, carry, carry);
+                carry = 0;
+		MP_ADD_CARRY(r0, a3, r0, carry);
+		MP_ADD_CARRY(r1, a3, r1, carry);
+		MP_ADD_CARRY(r2, a4, r2, carry);
+		r3 = carry; carry = 0;
+		MP_ADD_CARRY(r0, a5, r0, carry);
+		MP_ADD_CARRY(r1, a5, r1, carry);
+		MP_ADD_CARRY(r2, a5, r2, carry);
+		r3 += carry; carry = 0;
+		MP_ADD_CARRY(r1, a4, r1, carry);
+		MP_ADD_CARRY(r2,  0, r2, carry);
 		r3 += carry;
 
 #else 
@@ -229,9 +199,10 @@ ec_GFp_nistp192_mod(const mp_int *a, mp_int *r, const GFMethod *meth)
 		/* reduce out the carry */
 		while (r3) {
 #ifndef MPI_AMD64_ADD
-			MP_ADD_CARRY(r0, r3, r0, 0,     carry);
-			MP_ADD_CARRY(r1, r3, r1, carry, carry);
-			MP_ADD_CARRY(r2,  0, r2, carry, carry);
+                        carry = 0;
+			MP_ADD_CARRY(r0, r3, r0, carry);
+			MP_ADD_CARRY(r1, r3, r1, carry);
+			MP_ADD_CARRY(r2,  0, r2, carry);
 			r3 = carry;
 #else
 			a3=r3;
@@ -263,8 +234,10 @@ ec_GFp_nistp192_mod(const mp_int *a, mp_int *r, const GFMethod *meth)
 		      ((r1 == MP_DIGIT_MAX) || 
 			((r1 == (MP_DIGIT_MAX-1)) && (r0 == MP_DIGIT_MAX))))) {
 			/* do a quick subtract */
-			r0++;
-			r1 = r2 = 0;
+                        carry = 0;
+			MP_ADD_CARRY(r0, 1, r0, carry);
+			r1 += 1+carry;
+			r2 = 0;
 		}
 		/* set the lower words of r */
 		if (a != r) {
@@ -276,7 +249,7 @@ ec_GFp_nistp192_mod(const mp_int *a, mp_int *r, const GFMethod *meth)
 		MP_USED(r) = 3;
 #endif
 	}
-
+	s_mp_clamp(r);
   CLEANUP:
 	return res;
 }
@@ -286,7 +259,7 @@ ec_GFp_nistp192_mod(const mp_int *a, mp_int *r, const GFMethod *meth)
  * number of words are so small, we don't want to overhead of mp function
  * calls.  Uses optimized modular reduction for p192. 
  */
-mp_err
+static mp_err
 ec_GFp_nistp192_add(const mp_int *a, const mp_int *b, mp_int *r, 
 			const GFMethod *meth)
 {
@@ -313,9 +286,10 @@ ec_GFp_nistp192_add(const mp_int *a, const mp_int *b, mp_int *r,
 	}
 
 #ifndef MPI_AMD64_ADD
-	MP_ADD_CARRY(a0, r0, r0, 0,     carry);
-	MP_ADD_CARRY(a1, r1, r1, carry, carry);
-	MP_ADD_CARRY(a2, r2, r2, carry, carry);
+        carry = 0;
+	MP_ADD_CARRY(a0, r0, r0, carry);
+	MP_ADD_CARRY(a1, r1, r1, carry);
+	MP_ADD_CARRY(a2, r2, r2, carry);
 #else
 	__asm__ (
                 "xorq   %3,%3           \n\t"
@@ -335,9 +309,10 @@ ec_GFp_nistp192_add(const mp_int *a, const mp_int *b, mp_int *r,
 		      ((r1 == MP_DIGIT_MAX) || 
 			((r1 == (MP_DIGIT_MAX-1)) && (r0 == MP_DIGIT_MAX))))) {
 #ifndef MPI_AMD64_ADD
-		MP_ADD_CARRY(r0, 1, r0, 0,     carry);
-		MP_ADD_CARRY(r1, 1, r1, carry, carry);
-		MP_ADD_CARRY(r2, 0, r2, carry, carry);
+                carry = 0;
+		MP_ADD_CARRY(r0, 1, r0, carry);
+		MP_ADD_CARRY(r1, 1, r1, carry);
+		MP_ADD_CARRY(r2, 0, r2, carry);
 #else
 		__asm__ (
 			"addq   $1,%0           \n\t"
@@ -367,7 +342,7 @@ ec_GFp_nistp192_add(const mp_int *a, const mp_int *b, mp_int *r,
  * number of words are so small, we don't want to overhead of mp function
  * calls.  Uses optimized modular reduction for p192. 
  */
-mp_err
+static mp_err
 ec_GFp_nistp192_sub(const mp_int *a, const mp_int *b, mp_int *r, 
 			const GFMethod *meth)
 {
@@ -395,9 +370,10 @@ ec_GFp_nistp192_sub(const mp_int *a, const mp_int *b, mp_int *r,
 	}
 
 #ifndef MPI_AMD64_ADD
-	MP_SUB_BORROW(r0, b0, r0, 0,     borrow);
-	MP_SUB_BORROW(r1, b1, r1, borrow, borrow);
-	MP_SUB_BORROW(r2, b2, r2, borrow, borrow);
+	borrow = 0;
+	MP_SUB_BORROW(r0, b0, r0, borrow);
+	MP_SUB_BORROW(r1, b1, r1, borrow);
+	MP_SUB_BORROW(r2, b2, r2, borrow);
 #else
 	__asm__ (
                 "xorq   %3,%3           \n\t"
@@ -415,9 +391,10 @@ ec_GFp_nistp192_sub(const mp_int *a, const mp_int *b, mp_int *r,
 	 * (subtract the 2's complement of the curve field) */
 	if (borrow) {
 #ifndef MPI_AMD64_ADD
-		MP_SUB_BORROW(r0, 1, r0, 0,     borrow);
-		MP_SUB_BORROW(r1, 1, r1, borrow, borrow);
-		MP_SUB_BORROW(r2,  0, r2, borrow, borrow);
+		borrow = 0;
+		MP_SUB_BORROW(r0, 1, r0, borrow);
+		MP_SUB_BORROW(r1, 1, r1, borrow);
+		MP_SUB_BORROW(r2,  0, r2, borrow);
 #else
 		__asm__ (
 			"subq   $1,%0           \n\t"
@@ -446,7 +423,7 @@ ec_GFp_nistp192_sub(const mp_int *a, const mp_int *b, mp_int *r,
 /* Compute the square of polynomial a, reduce modulo p192. Store the
  * result in r.  r could be a.  Uses optimized modular reduction for p192. 
  */
-mp_err
+static mp_err
 ec_GFp_nistp192_sqr(const mp_int *a, mp_int *r, const GFMethod *meth)
 {
 	mp_err res = MP_OKAY;
@@ -460,7 +437,7 @@ ec_GFp_nistp192_sqr(const mp_int *a, mp_int *r, const GFMethod *meth)
 /* Compute the product of two polynomials a and b, reduce modulo p192.
  * Store the result in r.  r could be a or b; a could be b.  Uses
  * optimized modular reduction for p192. */
-mp_err
+static mp_err
 ec_GFp_nistp192_mul(const mp_int *a, const mp_int *b, mp_int *r,
 					const GFMethod *meth)
 {
@@ -474,7 +451,7 @@ ec_GFp_nistp192_mul(const mp_int *a, const mp_int *b, mp_int *r,
 
 /* Divides two field elements. If a is NULL, then returns the inverse of
  * b. */
-mp_err
+static mp_err
 ec_GFp_nistp192_div(const mp_int *a, const mp_int *b, mp_int *r,
 		   const GFMethod *meth)
 {

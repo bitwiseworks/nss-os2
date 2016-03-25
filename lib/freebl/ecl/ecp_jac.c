@@ -1,45 +1,6 @@
-/* 
- * ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the elliptic curve math library for prime field curves.
- *
- * The Initial Developer of the Original Code is
- * Sun Microsystems, Inc.
- * Portions created by the Initial Developer are Copyright (C) 2003
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Sheueling Chang-Shantz <sheueling.chang@sun.com>,
- *   Stephen Fung <fungstep@hotmail.com>, and
- *   Douglas Stebila <douglas@stebila.ca>, Sun Microsystems Laboratories.
- *   Bodo Moeller <moeller@cdc.informatik.tu-darmstadt.de>,
- *   Nils Larsch <nla@trustcenter.de>, and
- *   Lenka Fibikova <fibikova@exp-math.uni-essen.de>, the OpenSSL Project
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "ecp.h"
 #include "mplogic.h"
@@ -183,6 +144,20 @@ ec_GFp_pt_add_jac_aff(const mp_int *px, const mp_int *py, const mp_int *pz,
 	MP_CHECKOK(group->meth->field_sub(&A, px, &C, group->meth));
 	MP_CHECKOK(group->meth->field_sub(&B, py, &D, group->meth));
 
+	if (mp_cmp_z(&C) == 0) {
+		/* P == Q or P == -Q */
+		if (mp_cmp_z(&D) == 0) {
+			/* P == Q */
+			/* It is cheaper to double (qx, qy, 1) than (px, py, pz). */
+			MP_DIGIT(&D, 0) = 1; /* Set D to 1. */
+			MP_CHECKOK(ec_GFp_pt_dbl_jac(qx, qy, &D, rx, ry, rz, group));
+		} else {
+			/* P == -Q */
+			MP_CHECKOK(ec_GFp_pt_set_inf_jac(rx, ry, rz));
+		}
+		goto CLEANUP;
+	}
+
 	/* C2 = C^2, C3 = C^3 */
 	MP_CHECKOK(group->meth->field_sqr(&C, &C2, group->meth));
 	MP_CHECKOK(group->meth->field_mul(&C, &C2, &C3, group->meth));
@@ -244,7 +219,8 @@ ec_GFp_pt_dbl_jac(const mp_int *px, const mp_int *py, const mp_int *pz,
 	MP_CHECKOK(mp_init(&M));
 	MP_CHECKOK(mp_init(&S));
 
-	if (ec_GFp_pt_is_inf_jac(px, py, pz) == MP_YES) {
+	/* P == inf or P == -P */
+	if (ec_GFp_pt_is_inf_jac(px, py, pz) == MP_YES || mp_cmp_z(py) == 0) {
 		MP_CHECKOK(ec_GFp_pt_set_inf_jac(rx, ry, rz));
 		goto CLEANUP;
 	}
@@ -411,7 +387,7 @@ ec_GFp_pts_mul_jac(const mp_int *k1, const mp_int *k2, const mp_int *px,
 	mp_int precomp[4][4][2];
 	mp_int rz;
 	const mp_int *a, *b;
-	int i, j;
+	unsigned int i, j;
 	int ai, bi, d;
 
 	for (i = 0; i < 4; i++) {
@@ -518,7 +494,7 @@ ec_GFp_pts_mul_jac(const mp_int *k1, const mp_int *k2, const mp_int *px,
 	MP_CHECKOK(mp_init(&rz));
 	MP_CHECKOK(ec_GFp_pt_set_inf_jac(rx, ry, &rz));
 
-	for (i = d - 1; i >= 0; i--) {
+        for (i = d; i-- > 0;) {
 		ai = MP_GET_BIT(a, 2 * i + 1);
 		ai <<= 1;
 		ai |= MP_GET_BIT(a, 2 * i);

@@ -1,39 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Netscape security libraries.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1994-2000
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Dr Vipul Gupta <vipul.gupta@sun.com>, Sun Microsystems Laboratories
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "secoid.h"
 #include "pkcs11t.h"
@@ -53,17 +20,12 @@
 #endif
 
 /*
- * Version information for the 'ident' and 'what commands
- *
- * NOTE: the first component of the concatenated rcsid string
- * must not end in a '$' to prevent rcs keyword substitution.
+ * Version information
  */
-const char __nss_util_rcsid[] = "$Header: NSS " NSSUTIL_VERSION _DEBUG_STRING
-        "  " __DATE__ " " __TIME__ " $";
-const char __nss_util_sccsid[] = "@(#)NSS " NSSUTIL_VERSION _DEBUG_STRING
-        "  " __DATE__ " " __TIME__;
+const char __nss_util_version[] = "Version: NSS " NSSUTIL_VERSION _DEBUG_STRING;
 
 /* MISSI Mosaic Object ID space */
+/* USGov algorithm OID space: { 2 16 840 1 101 } */
 #define USGOV                   0x60, 0x86, 0x48, 0x01, 0x65
 #define MISSI	                USGOV, 0x02, 0x01, 0x01
 #define MISSI_OLD_KEA_DSS	MISSI, 0x0c
@@ -76,6 +38,7 @@ const char __nss_util_sccsid[] = "@(#)NSS " NSSUTIL_VERSION _DEBUG_STRING
 #define NISTALGS    USGOV, 3, 4
 #define AES         NISTALGS, 1
 #define SHAXXX      NISTALGS, 2
+#define DSA2        NISTALGS, 3
 
 /**
  ** The Netscape OID space is allocated by Terry Hayes.  If you need
@@ -113,10 +76,6 @@ const char __nss_util_sccsid[] = "@(#)NSS " NSSUTIL_VERSION _DEBUG_STRING
 #define PKCS7			PKCS, 0x07
 #define PKCS9			PKCS, 0x09
 #define PKCS12			PKCS, 0x0c
-
-/* Fortezza algorithm OID space: { 2 16 840 1 101 2 1 1 } */
-/* ### mwelch -- Is this just for algorithms, or all of Fortezza? */
-#define FORTEZZA_ALG 0x60, 0x86, 0x48, 0x01, 0x65, 0x02, 0x01, 0x01
 
 /* Other OID name spaces */
 #define ALGORITHM		0x2b, 0x0e, 0x03, 0x02
@@ -178,6 +137,14 @@ const char __nss_util_sccsid[] = "@(#)NSS " NSSUTIL_VERSION _DEBUG_STRING
 /* Microsoft Object ID space */
 /* { 1.3.6.1.4.1.311 } */
 #define MICROSOFT_OID 0x2b, 0x6, 0x1, 0x4, 0x1, 0x82, 0x37
+#define EV_NAME_ATTRIBUTE 	MICROSOFT_OID, 60, 2, 1
+
+/* Microsoft Crypto 2.0 ID space */
+/* { 1.3.6.1.4.1.311.10 } */
+#define MS_CRYPTO_20            MICROSOFT_OID, 10
+/* Microsoft Crypto 2.0 Extended Key Usage ID space */
+/* { 1.3.6.1.4.1.311.10.3 } */
+#define MS_CRYPTO_EKU           MS_CRYPTO_20, 3
 
 #define CERTICOM_OID            0x2b, 0x81, 0x04
 #define SECG_OID                CERTICOM_OID, 0x00
@@ -195,6 +162,11 @@ const char __nss_util_sccsid[] = "@(#)NSS " NSSUTIL_VERSION _DEBUG_STRING
 #define MITSUBISHI_ALG 0x2a,0x83,0x08,0x8c,0x9a,0x4b,0x3d,0x01,0x01
 #define CAMELLIA_ENCRYPT_OID MITSUBISHI_ALG,1
 #define CAMELLIA_WRAP_OID    MITSUBISHI_ALG,3
+
+/* For IDEA: 1.3.6.1.4.1.188.7.1.1
+ */
+#define ASCOM_OID 0x2b,0x6,0x1,0x4,0x1,0xbc
+#define ASCOM_IDEA_ALG ASCOM_OID,0x7,0x1,0x1
 
 /* for SEED : iso(1) member-body(2) korea(410)
  *    kisa(200004) algorithm(1)
@@ -295,9 +267,11 @@ CONST_OID x520StreetAddress[]                   = { X520_ATTRIBUTE_TYPE, 9 };
 CONST_OID x520OrgName[]                         = { X520_ATTRIBUTE_TYPE, 10 };
 CONST_OID x520OrgUnitName[]                     = { X520_ATTRIBUTE_TYPE, 11 };
 CONST_OID x520Title[]                           = { X520_ATTRIBUTE_TYPE, 12 };
+CONST_OID x520BusinessCategory[]                = { X520_ATTRIBUTE_TYPE, 15 };
 CONST_OID x520PostalAddress[]                   = { X520_ATTRIBUTE_TYPE, 16 };
 CONST_OID x520PostalCode[]                      = { X520_ATTRIBUTE_TYPE, 17 };
 CONST_OID x520PostOfficeBox[]                   = { X520_ATTRIBUTE_TYPE, 18 };
+CONST_OID x520Name[]                            = { X520_ATTRIBUTE_TYPE, 41 };
 CONST_OID x520GivenName[]                       = { X520_ATTRIBUTE_TYPE, 42 };
 CONST_OID x520Initials[]                        = { X520_ATTRIBUTE_TYPE, 43 };
 CONST_OID x520GenerationQualifier[]             = { X520_ATTRIBUTE_TYPE, 44 };
@@ -445,6 +419,8 @@ CONST_OID pkcs12KeyUsageAttr[]          	= { 2, 5, 29, 15 };
 
 CONST_OID ansix9DSASignature[]               	= { ANSI_X9_ALGORITHM, 0x01 };
 CONST_OID ansix9DSASignaturewithSHA1Digest[] 	= { ANSI_X9_ALGORITHM, 0x03 };
+CONST_OID nistDSASignaturewithSHA224Digest[]	= { DSA2, 0x01 };
+CONST_OID nistDSASignaturewithSHA256Digest[]	= { DSA2, 0x02 };
 
 /* verisign OIDs */
 CONST_OID verisignUserNotices[]     		= { VERISIGN, 1, 7, 1, 1 };
@@ -479,14 +455,19 @@ CONST_OID pkixExtendedKeyUsageCodeSign[]      	= { PKIX_KEY_USAGE, 3 };
 CONST_OID pkixExtendedKeyUsageEMailProtect[]  	= { PKIX_KEY_USAGE, 4 };
 CONST_OID pkixExtendedKeyUsageTimeStamp[]     	= { PKIX_KEY_USAGE, 8 };
 CONST_OID pkixOCSPResponderExtendedKeyUsage[] 	= { PKIX_KEY_USAGE, 9 };
+CONST_OID msExtendedKeyUsageTrustListSigning[]	= { MS_CRYPTO_EKU, 1 };
 
 /* OIDs for Netscape defined algorithms */
 CONST_OID netscapeSMimeKEA[] 			= { NETSCAPE_ALGS, 0x01 };
 
 /* Fortezza algorithm OIDs */
-CONST_OID skipjackCBC[] 			= { FORTEZZA_ALG, 0x04 };
+CONST_OID skipjackCBC[] 			= { MISSI, 0x04 };
 CONST_OID dhPublicKey[] 			= { ANSI_X942_ALGORITHM, 0x1 };
 
+CONST_OID idea_CBC[] 				= { ASCOM_IDEA_ALG, 2 };
+CONST_OID aes128_GCM[] 				= { AES, 0x6 };
+CONST_OID aes192_GCM[] 				= { AES, 0x1a };
+CONST_OID aes256_GCM[] 				= { AES, 0x2e };
 CONST_OID aes128_ECB[] 				= { AES, 1 };
 CONST_OID aes128_CBC[] 				= { AES, 2 };
 #ifdef DEFINE_ALL_AES_CIPHERS
@@ -514,13 +495,11 @@ CONST_OID aes256_KEY_WRAP[]			= { AES, 45 };
 CONST_OID camellia128_CBC[]			= { CAMELLIA_ENCRYPT_OID, 2};
 CONST_OID camellia192_CBC[]			= { CAMELLIA_ENCRYPT_OID, 3};
 CONST_OID camellia256_CBC[]			= { CAMELLIA_ENCRYPT_OID, 4};
-CONST_OID camellia128_KEY_WRAP[]		= { CAMELLIA_WRAP_OID, 2};
-CONST_OID camellia192_KEY_WRAP[]		= { CAMELLIA_WRAP_OID, 3};
-CONST_OID camellia256_KEY_WRAP[]		= { CAMELLIA_WRAP_OID, 4};
 
 CONST_OID sha256[]                              = { SHAXXX, 1 };
 CONST_OID sha384[]                              = { SHAXXX, 2 };
 CONST_OID sha512[]                              = { SHAXXX, 3 };
+CONST_OID sha224[]                              = { SHAXXX, 4 };
 
 CONST_OID ansix962ECPublicKey[]             = { ANSI_X962_OID, 0x02, 0x01 };
 CONST_OID ansix962SignaturewithSHA1Digest[] = { ANSI_X962_SIGNATURE_OID, 0x01 };
@@ -602,11 +581,17 @@ CONST_OID secgECsect571r1[] = {SECG_OID, 0x27 };
 
 CONST_OID seed_CBC[]				= { SEED_OID, 4 };
 
+CONST_OID evIncorporationLocality[]     = { EV_NAME_ATTRIBUTE, 1 };
+CONST_OID evIncorporationState[]        = { EV_NAME_ATTRIBUTE, 2 };
+CONST_OID evIncorporationCountry[]      = { EV_NAME_ATTRIBUTE, 3 };
+
 #define OI(x) { siDEROID, (unsigned char *)x, sizeof x }
 #ifndef SECOID_NO_STRINGS
 #define OD(oid,tag,desc,mech,ext) { OI(oid), tag, desc, mech, ext }
+#define ODE(tag,desc,mech,ext) { { siDEROID, NULL, 0 }, tag, desc, mech, ext }
 #else
 #define OD(oid,tag,desc,mech,ext) { OI(oid), tag, 0, mech, ext }
+#define ODE(tag,desc,mech,ext) { { siDEROID, NULL, 0 }, tag, 0, mech, ext }
 #endif
 
 #if defined(NSS_ALLOW_UNSUPPORTED_CRITICAL)
@@ -1636,6 +1621,97 @@ const static SECOidData oids[SEC_OID_TOTAL] = {
     OD( pkcs1SHA224WithRSAEncryption, SEC_OID_PKCS1_SHA224_WITH_RSA_ENCRYPTION,
 	"PKCS #1 SHA-224 With RSA Encryption", CKM_SHA224_RSA_PKCS,
 	INVALID_CERT_EXTENSION ),
+
+    OD( sha224, SEC_OID_SHA224, "SHA-224", CKM_SHA224, INVALID_CERT_EXTENSION),
+
+    OD( evIncorporationLocality, SEC_OID_EV_INCORPORATION_LOCALITY,
+        "Jurisdiction of Incorporation Locality Name",
+	CKM_INVALID_MECHANISM, INVALID_CERT_EXTENSION ),
+    OD( evIncorporationState,    SEC_OID_EV_INCORPORATION_STATE,
+        "Jurisdiction of Incorporation State Name",
+	CKM_INVALID_MECHANISM, INVALID_CERT_EXTENSION ),
+    OD( evIncorporationCountry,  SEC_OID_EV_INCORPORATION_COUNTRY,
+        "Jurisdiction of Incorporation Country Name",
+	CKM_INVALID_MECHANISM, INVALID_CERT_EXTENSION ),
+    OD( x520BusinessCategory,    SEC_OID_BUSINESS_CATEGORY,
+        "Business Category",
+	CKM_INVALID_MECHANISM, INVALID_CERT_EXTENSION ),
+
+    OD( nistDSASignaturewithSHA224Digest,
+	SEC_OID_NIST_DSA_SIGNATURE_WITH_SHA224_DIGEST,
+	"DSA with SHA-224 Signature",
+	CKM_INVALID_MECHANISM /* not yet defined */, INVALID_CERT_EXTENSION),
+    OD( nistDSASignaturewithSHA256Digest,
+	SEC_OID_NIST_DSA_SIGNATURE_WITH_SHA256_DIGEST,
+	"DSA with SHA-256 Signature",
+	CKM_INVALID_MECHANISM /* not yet defined */, INVALID_CERT_EXTENSION),
+    OD( msExtendedKeyUsageTrustListSigning, 
+        SEC_OID_MS_EXT_KEY_USAGE_CTL_SIGNING,
+        "Microsoft Trust List Signing",
+	CKM_INVALID_MECHANISM, INVALID_CERT_EXTENSION ),
+    OD( x520Name, SEC_OID_AVA_NAME,
+    	"X520 Name",    CKM_INVALID_MECHANISM, INVALID_CERT_EXTENSION ),
+
+    OD( aes128_GCM, SEC_OID_AES_128_GCM,
+	"AES-128-GCM", CKM_AES_GCM, INVALID_CERT_EXTENSION ),
+    OD( aes192_GCM, SEC_OID_AES_192_GCM,
+	"AES-192-GCM", CKM_AES_GCM, INVALID_CERT_EXTENSION ),
+    OD( aes256_GCM, SEC_OID_AES_256_GCM,
+	"AES-256-GCM", CKM_AES_GCM, INVALID_CERT_EXTENSION ),
+    OD( idea_CBC, SEC_OID_IDEA_CBC,
+	"IDEA_CBC", CKM_INVALID_MECHANISM, INVALID_CERT_EXTENSION ),
+
+    ODE( SEC_OID_RC2_40_CBC,
+	"RC2-40-CBC", CKM_RC2_CBC, INVALID_CERT_EXTENSION ),
+    ODE( SEC_OID_DES_40_CBC,
+	"DES-40-CBC", CKM_RC2_CBC, INVALID_CERT_EXTENSION ),
+    ODE( SEC_OID_RC4_40,
+	"RC4-40", CKM_RC4, INVALID_CERT_EXTENSION ),
+    ODE( SEC_OID_RC4_56,
+	"RC4-56", CKM_RC4, INVALID_CERT_EXTENSION ),
+    ODE( SEC_OID_NULL_CIPHER,
+	"NULL cipher", CKM_INVALID_MECHANISM, INVALID_CERT_EXTENSION ),
+    ODE( SEC_OID_HMAC_MD5,
+	"HMAC-MD5", CKM_MD5_HMAC, INVALID_CERT_EXTENSION ),
+    ODE( SEC_OID_TLS_RSA,
+	"TLS RSA key exchange", CKM_INVALID_MECHANISM, INVALID_CERT_EXTENSION ),
+    ODE( SEC_OID_TLS_DHE_RSA,
+	"TLS DHE-RSA key exchange", CKM_INVALID_MECHANISM, INVALID_CERT_EXTENSION ),
+    ODE( SEC_OID_TLS_DHE_DSS,
+	"TLS DHE-DSS key exchange", CKM_INVALID_MECHANISM, INVALID_CERT_EXTENSION ),
+    ODE( SEC_OID_TLS_DH_RSA,
+	"TLS DH-RSA key exchange", CKM_INVALID_MECHANISM, INVALID_CERT_EXTENSION ),
+    ODE( SEC_OID_TLS_DH_DSS,
+	"TLS DH-DSS key exchange", CKM_INVALID_MECHANISM, INVALID_CERT_EXTENSION ),
+    ODE( SEC_OID_TLS_DH_ANON,
+	"TLS DH-ANON key exchange", CKM_INVALID_MECHANISM, INVALID_CERT_EXTENSION ),
+    ODE( SEC_OID_TLS_ECDHE_ECDSA,
+	"TLS ECDHE-ECDSA key exchange", CKM_INVALID_MECHANISM, INVALID_CERT_EXTENSION ),
+    ODE( SEC_OID_TLS_ECDHE_RSA,
+	"TLS ECDHE-RSA key exchange", CKM_INVALID_MECHANISM, INVALID_CERT_EXTENSION ),
+    ODE( SEC_OID_TLS_ECDH_ECDSA,
+	"TLS ECDH-ECDSA key exchange", CKM_INVALID_MECHANISM, INVALID_CERT_EXTENSION ),
+    ODE( SEC_OID_TLS_ECDH_RSA,
+	"TLS ECDH-RSA key exchange", CKM_INVALID_MECHANISM, INVALID_CERT_EXTENSION ),
+    ODE( SEC_OID_TLS_ECDH_ANON,
+	"TLS ECDH-ANON key exchange", CKM_INVALID_MECHANISM, INVALID_CERT_EXTENSION ),
+    ODE( SEC_OID_TLS_RSA_EXPORT,
+	"TLS RSA-EXPORT key exchange", CKM_INVALID_MECHANISM, INVALID_CERT_EXTENSION ),
+    ODE( SEC_OID_TLS_DHE_RSA_EXPORT,
+	"TLS DHE-RSA-EXPORT key exchange", CKM_INVALID_MECHANISM, INVALID_CERT_EXTENSION ),
+    ODE( SEC_OID_TLS_DHE_DSS_EXPORT,
+	"TLS DHE-DSS-EXPORT key exchange", CKM_INVALID_MECHANISM, INVALID_CERT_EXTENSION ),
+    ODE( SEC_OID_TLS_DH_RSA_EXPORT,
+	"TLS DH-RSA-EXPORT key exchange", CKM_INVALID_MECHANISM, INVALID_CERT_EXTENSION ),
+    ODE( SEC_OID_TLS_DH_DSS_EXPORT,
+	"TLS DH-DSS-EXPORT key exchange", CKM_INVALID_MECHANISM, INVALID_CERT_EXTENSION ),
+    ODE( SEC_OID_TLS_DH_ANON_EXPORT,
+	"TLS DH-ANON-EXPORT key exchange", CKM_INVALID_MECHANISM, INVALID_CERT_EXTENSION ),
+    ODE( SEC_OID_APPLY_SSL_POLICY,
+	"Apply SSL policy (pseudo-OID)", CKM_INVALID_MECHANISM, INVALID_CERT_EXTENSION ),
+    ODE( SEC_OID_CHACHA20_POLY1305,
+	"ChaCha20-Poly1305", CKM_NSS_CHACHA20_POLY1305, INVALID_CERT_EXTENSION ),
+
 };
 
 /* PRIVATE EXTENDED SECOID Table
@@ -1865,9 +1941,10 @@ static PLHashTable *oidmechhash = NULL;
 static PLHashNumber
 secoid_HashNumber(const void *key)
 {
-    return (PLHashNumber) key;
+    return (PLHashNumber)((char *)key - (char *)NULL);
 }
 
+#define DEF_FLAGS (NSS_USE_ALG_IN_CERT_SIGNATURE|NSS_USE_ALG_IN_SSL_KX|NSS_USE_ALG_IN_SSL_KX)
 static void
 handleHashAlgSupport(char * envVal)
 {
@@ -1883,14 +1960,14 @@ handleHashAlgSupport(char * envVal)
 		*nextArg++ = '\0';
 	    }
 	}
-	notEnable = (*arg == '-') ? NSS_USE_ALG_IN_CERT_SIGNATURE : 0;
+	notEnable = (*arg == '-') ? (DEF_FLAGS) : 0;
 	if ((*arg == '+' || *arg == '-') && *++arg) { 
 	    int i;
 
 	    for (i = 1; i < SEC_OID_TOTAL; i++) {
 	        if (oids[i].desc && strstr(arg, oids[i].desc)) {
 		     xOids[i].notPolicyFlags = notEnable |
-		    (xOids[i].notPolicyFlags & ~NSS_USE_ALG_IN_CERT_SIGNATURE);
+		    (xOids[i].notPolicyFlags & ~(DEF_FLAGS));
 		}
 	    }
 	}
@@ -1906,24 +1983,30 @@ SECOID_Init(void)
     const SECOidData *oid;
     int i;
     char * envVal;
-    volatile char c; /* force a reference that won't get optimized away */
 
-    c = __nss_util_rcsid[0] + __nss_util_sccsid[0];
+#define NSS_VERSION_VARIABLE __nss_util_version
+#include "verref.h"
 
     if (oidhash) {
 	return SECSuccess; /* already initialized */
     }
 
-    if (!PR_GetEnv("NSS_ALLOW_WEAK_SIGNATURE_ALG")) {
+    if (!PR_GetEnvSecure("NSS_ALLOW_WEAK_SIGNATURE_ALG")) {
 	/* initialize any policy flags that are disabled by default */
 	xOids[SEC_OID_MD2                           ].notPolicyFlags = ~0;
 	xOids[SEC_OID_MD4                           ].notPolicyFlags = ~0;
+	xOids[SEC_OID_MD5                           ].notPolicyFlags = ~0;
 	xOids[SEC_OID_PKCS1_MD2_WITH_RSA_ENCRYPTION ].notPolicyFlags = ~0;
 	xOids[SEC_OID_PKCS1_MD4_WITH_RSA_ENCRYPTION ].notPolicyFlags = ~0;
+	xOids[SEC_OID_PKCS1_MD5_WITH_RSA_ENCRYPTION ].notPolicyFlags = ~0;
 	xOids[SEC_OID_PKCS5_PBE_WITH_MD2_AND_DES_CBC].notPolicyFlags = ~0;
+	xOids[SEC_OID_PKCS5_PBE_WITH_MD5_AND_DES_CBC].notPolicyFlags = ~0;
     }
 
-    envVal = PR_GetEnv("NSS_HASH_ALG_SUPPORT");
+    /* turn off NSS_USE_POLICY_IN_SSL by default */
+    xOids[SEC_OID_APPLY_SSL_POLICY].notPolicyFlags = NSS_USE_POLICY_IN_SSL;
+
+    envVal = PR_GetEnvSecure("NSS_HASH_ALG_SUPPORT");
     if (envVal)
     	handleHashAlgSupport(envVal);
 
@@ -2174,4 +2257,8 @@ void UTIL_SetForkState(PRBool forked)
     parentForkedAfterC_Initialize = forked;
 }
 
-
+const char *
+NSSUTIL_GetVersion(void)
+{
+    return NSSUTIL_VERSION;
+}

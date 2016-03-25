@@ -1,40 +1,8 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Netscape security libraries.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1994-2000
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 #ifndef _SECMOD_H_
-#define _SEDMOD_H_
+#define _SECMOD_H_
 #include "seccomon.h"
 #include "secmodt.h"
 #include "prinrval.h"
@@ -60,6 +28,7 @@
 #define PUBLIC_MECH_SHA512_FLAG      0x00008000ul
 #define PUBLIC_MECH_CAMELLIA_FLAG    0x00010000ul
 #define PUBLIC_MECH_SEED_FLAG        0x00020000ul
+#define PUBLIC_MECH_ECC_FLAG         0x00040000ul
 
 #define PUBLIC_MECH_RANDOM_FLAG      0x08000000ul
 #define PUBLIC_MECH_FRIENDLY_FLAG    0x10000000ul
@@ -95,6 +64,21 @@ SECStatus SECMOD_UnloadUserModule(SECMODModule *mod);
 
 SECMODModule * SECMOD_CreateModule(const char *lib, const char *name,
 					const char *param, const char *nss);
+SECMODModule * SECMOD_CreateModuleEx(const char *lib, const char *name,
+					const char *param, const char *nss,
+					const char *config);
+/*
+ * After a fork(), PKCS #11 says we need to call C_Initialize again in
+ * the child before we can use the module. This function causes this 
+ * reinitialization.
+ * NOTE: Any outstanding handles will become invalid, which means your
+ * keys and contexts will fail, but new ones can be created.
+ *
+ * Setting 'force' to true means to do the reinitialization even if the 
+ * PKCS #11 module does not seem to need it. This allows software modules 
+ * which ignore fork to preserve their keys across the fork().
+ */
+SECStatus SECMOD_RestartModules(PRBool force);
 
 
 /* Module Management */
@@ -158,6 +142,7 @@ PRBool SECMOD_GetDefaultModDBFlag(SECMODModule *mod);
 /* Functions used to convert between internal & public representation
  * of Mechanism Flags and Cipher Enable Flags */
 extern unsigned long SECMOD_PubMechFlagstoInternal(unsigned long publicFlags);
+extern unsigned long SECMOD_InternaltoPubMechFlags(unsigned long internalFlags);
 extern unsigned long SECMOD_PubCipherFlagstoInternal(unsigned long publicFlags);
 
 PRBool SECMOD_HasRemovableSlots(SECMODModule *mod);

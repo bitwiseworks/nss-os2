@@ -1,42 +1,9 @@
 /* -*- Mode: C; tab-width: 8 -*-*/
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Netscape security libraries.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1994-2000
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-
-/* Header file with all of the structures and types that will be exported 
+/* Header file with all of the structures and types that will be exported
  * by the security library for implementation of CRMF.
  */
 
@@ -79,7 +46,7 @@ typedef enum {
 } CRMFPublicationAction;
 
 /*
- * An enumeration for the possible for pubMethod which is a part of 
+ * An enumeration for the possible for pubMethod which is a part of
  * the SinglePubInfo ASN1 type.
  */
 typedef enum {
@@ -111,7 +78,7 @@ typedef enum {
 } CRMFPOPChoice;
 
 /*
- * An enumertion type for options for the authInfo field of the 
+ * An enumertion type for options for the authInfo field of the
  * CRMFPOPOSigningKeyInput structure.
  */
 typedef enum {
@@ -164,41 +131,41 @@ typedef enum {
  *         The number of DER encoded bytes to write out.
  *
  */
-typedef void (*CRMFEncoderOutputCallback) (void *arg,
-					   const char *buf,
-					   unsigned long len);
+typedef void (*CRMFEncoderOutputCallback)(void *arg,
+                                          const char *buf,
+                                          unsigned long len);
 
 /*
  * Type for the function that gets a password.  Just in case we ever
  * need to support publicKeyMAC for POPOSigningKeyInput
  */
-typedef SECItem* (*CRMFMACPasswordCallback) (void *arg);
+typedef SECItem *(*CRMFMACPasswordCallback)(void *arg);
 
-typedef struct CRMFOptionalValidityStr      CRMFOptionalValidity;
-typedef struct CRMFValidityCreationInfoStr  CRMFGetValidity;
-typedef struct CRMFCertTemplateStr          CRMFCertTemplate;
-typedef struct CRMFCertRequestStr           CRMFCertRequest;
-typedef struct CRMFCertReqMsgStr            CRMFCertReqMsg;
-typedef struct CRMFCertReqMessagesStr       CRMFCertReqMessages;
-typedef struct CRMFProofOfPossessionStr     CRMFProofOfPossession;
-typedef struct CRMFPOPOSigningKeyStr        CRMFPOPOSigningKey;
-typedef struct CRMFPOPOSigningKeyInputStr   CRMFPOPOSigningKeyInput;
-typedef struct CRMFPOPOPrivKeyStr           CRMFPOPOPrivKey;
-typedef struct CRMFPKIPublicationInfoStr    CRMFPKIPublicationInfo;
-typedef struct CRMFSinglePubInfoStr         CRMFSinglePubInfo;
-typedef struct CRMFPKIArchiveOptionsStr     CRMFPKIArchiveOptions;
-typedef struct CRMFEncryptedKeyStr          CRMFEncryptedKey;
-typedef struct CRMFEncryptedValueStr        CRMFEncryptedValue;
-typedef struct CRMFCertIDStr                CRMFCertID;
-typedef struct CRMFCertIDStr                CRMFOldCertID;
-typedef CERTSubjectPublicKeyInfo            CRMFProtocolEncrKey;
-typedef struct CRMFValidityCreationInfoStr  CRMFValidityCreationInfo;
-typedef struct CRMFCertExtCreationInfoStr   CRMFCertExtCreationInfo;
-typedef struct CRMFPKMACValueStr            CRMFPKMACValue;
-typedef struct CRMFAttributeStr             CRMFAttribute;
-typedef struct CRMFControlStr               CRMFControl;
-typedef CERTGeneralName                     CRMFGeneralName;
-typedef struct CRMFCertExtensionStr         CRMFCertExtension;
+typedef struct CRMFOptionalValidityStr CRMFOptionalValidity;
+typedef struct CRMFValidityCreationInfoStr CRMFGetValidity;
+typedef struct CRMFCertTemplateStr CRMFCertTemplate;
+typedef struct CRMFCertRequestStr CRMFCertRequest;
+typedef struct CRMFCertReqMsgStr CRMFCertReqMsg;
+typedef struct CRMFCertReqMessagesStr CRMFCertReqMessages;
+typedef struct CRMFProofOfPossessionStr CRMFProofOfPossession;
+typedef struct CRMFPOPOSigningKeyStr CRMFPOPOSigningKey;
+typedef struct CRMFPOPOSigningKeyInputStr CRMFPOPOSigningKeyInput;
+typedef struct CRMFPOPOPrivKeyStr CRMFPOPOPrivKey;
+typedef struct CRMFPKIPublicationInfoStr CRMFPKIPublicationInfo;
+typedef struct CRMFSinglePubInfoStr CRMFSinglePubInfo;
+typedef struct CRMFPKIArchiveOptionsStr CRMFPKIArchiveOptions;
+typedef struct CRMFEncryptedKeyStr CRMFEncryptedKey;
+typedef struct CRMFEncryptedValueStr CRMFEncryptedValue;
+typedef struct CRMFCertIDStr CRMFCertID;
+typedef struct CRMFCertIDStr CRMFOldCertID;
+typedef CERTSubjectPublicKeyInfo CRMFProtocolEncrKey;
+typedef struct CRMFValidityCreationInfoStr CRMFValidityCreationInfo;
+typedef struct CRMFCertExtCreationInfoStr CRMFCertExtCreationInfo;
+typedef struct CRMFPKMACValueStr CRMFPKMACValue;
+typedef struct CRMFAttributeStr CRMFAttribute;
+typedef struct CRMFControlStr CRMFControl;
+typedef CERTGeneralName CRMFGeneralName;
+typedef struct CRMFCertExtensionStr CRMFCertExtension;
 
 struct CRMFValidityCreationInfoStr {
     PRTime *notBefore;
@@ -215,6 +182,5 @@ struct CRMFCertExtCreationInfoStr {
  */
 extern const SEC_ASN1Template CRMFCertReqMessagesTemplate[];
 extern const SEC_ASN1Template CRMFCertRequestTemplate[];
-
 
 #endif /*_CRMFT_H_*/

@@ -1,38 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Netscape security libraries.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1994-2000
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "plarena.h"
 
@@ -81,13 +49,11 @@ static const SEC_ASN1Template NSSPKCS5PKCS12V2PBEParameterTemplate[] =
 
 struct nsspkcs5V2PBEParameterStr {
     SECAlgorithmID keyParams;  /* parameters of the key generation */
-    SECAlgorithmID algParams;  /* paramters for the encryption or mac op */
+    SECAlgorithmID algParams;  /* parameters for the encryption or mac op */
 };
 
 typedef struct nsspkcs5V2PBEParameterStr nsspkcs5V2PBEParameter;
-#define PBKDF2
 
-#ifdef PBKDF2
 static const SEC_ASN1Template NSSPKCS5V2PBES2ParameterTemplate[] =
 {   
     { SEC_ASN1_SEQUENCE, 0, NULL, sizeof(nsspkcs5V2PBEParameter) },
@@ -113,7 +79,6 @@ static const SEC_ASN1Template NSSPKCS5V2PBEParameterTemplate[] =
         SEC_ASN1_SUB(SECOID_AlgorithmIDTemplate) },
     { 0 }
 };
-#endif
 
 SECStatus
 nsspkcs5_HashBuf(const SECHashObject *hashObj, unsigned char *dest,
@@ -333,8 +298,6 @@ nsspkcs5_PBKDF1Extended(const SECHashObject *hashObj,
     return newHash;
 }
 
-#ifdef PBKDF2
-
 /*
  * PBDKDF2 is PKCS #5 v2.0 it's currently not used by NSS
  */
@@ -351,8 +314,8 @@ do_xor(unsigned char *dest, unsigned char *src, int len)
 }
 
 static SECStatus
-nsspkcs5_PBKFD2_F(const SECHashObject *hashobj, SECItem *pwitem, SECItem *salt,
-			int iterations, unsigned int i, unsigned char *T)
+nsspkcs5_PBKDF2_F(const SECHashObject *hashobj, SECItem *pwitem, SECItem *salt,
+                  int iterations, unsigned int i, unsigned char *T)
 {
     int j;
     HMACContext *cx = NULL;
@@ -425,7 +388,7 @@ nsspkcs5_PBKDF2(const SECHashObject *hashobj, NSSPKCS5PBEParameter *pbe_param,
     }
 
     for (i=1,rp=result->data; i <= nblocks ; i++, rp +=hLen) {
-	rv = nsspkcs5_PBKFD2_F(hashobj,pwitem,salt,iterations,i,T);
+        rv = nsspkcs5_PBKDF2_F(hashobj, pwitem, salt, iterations, i, T);
 	if (rv != SECSuccess) {
 	    break;
 	}
@@ -442,10 +405,9 @@ loser:
     } else {
 	result->len = dkLen;
     }
-	
+
     return result;
 }
-#endif
 
 #define HMAC_BUFFER 64
 #define NSSPBE_ROUNDUP(x,y) ((((x)+((y)-1))/(y))*(y))
@@ -458,7 +420,7 @@ nsspkcs5_PKCS12PBE(const SECHashObject *hashObject,
 		   NSSPKCS5PBEParameter *pbe_param, SECItem *pwitem, 
 		   PBEBitGenID bitGenPurpose, unsigned int bytesNeeded)
 {
-    PRArenaPool *arena = NULL;
+    PLArenaPool *arena = NULL;
     unsigned int SLen,PLen;
     unsigned int hashLength = hashObject->length;
     unsigned char *S, *P;
@@ -548,7 +510,7 @@ nsspkcs5_PKCS12PBE(const SECHashObject *hashObject,
 	}
 
 	PORT_Memcpy(Ai, iterBuf, hashLength);
-	for (Bidx = 0; Bidx < B.len; Bidx += hashLength) {
+	for (Bidx = 0; Bidx < (int)B.len; Bidx += hashLength) {
 	    PORT_Memcpy(B.data+Bidx,iterBuf,NSSPBE_MIN(B.len-Bidx,hashLength));
 	}
 
@@ -632,14 +594,12 @@ nsspkcs5_ComputeKeyAndIV(NSSPKCS5PBEParameter *pbe_param, SECItem *pwitem,
 	} 
 	
     	break;
-#ifdef PBKDF2
     case NSSPKCS5_PBKDF2:
 	hash = nsspkcs5_PBKDF2(hashObj,pbe_param,pwitem);
 	if (getIV) {
 	    PORT_Memcpy(iv->data, pbe_param->ivData, iv->len);
 	}
     	break;
-#endif
     case NSSPKCS5_PKCS12_V2:
 	if (getIV) {
 	    hash = nsspkcs5_PKCS12PBE(hashObj,pbe_param,pwitem,
@@ -683,13 +643,14 @@ loser:
 }
 
 static SECStatus
-nsspkcs5_FillInParam(SECOidTag algorithm, NSSPKCS5PBEParameter *pbe_param)
+nsspkcs5_FillInParam(SECOidTag algorithm, HASH_HashType hashType,
+                     NSSPKCS5PBEParameter *pbe_param)
 {
     PRBool skipType = PR_FALSE;
 
     pbe_param->keyLen = 5;
     pbe_param->ivLen = 8;
-    pbe_param->hashType = HASH_AlgSHA1;
+    pbe_param->hashType = hashType;
     pbe_param->pbeType = NSSPKCS5_PBKDF1;
     pbe_param->encAlg = SEC_OID_RC2_CBC;
     pbe_param->is2KeyDES = PR_FALSE;
@@ -749,7 +710,6 @@ finish_des:
         pbe_param->encAlg =  SEC_OID_RC4;
         break;
 
-#ifdef PBKDF2
     case SEC_OID_PKCS5_PBKDF2:
     case SEC_OID_PKCS5_PBES2:
     case SEC_OID_PKCS5_PBMAC1:
@@ -759,7 +719,6 @@ finish_des:
         pbe_param->encAlg =  SEC_OID_PKCS5_PBKDF2;
 	pbe_param->keyLen = 0; /* needs to be set by caller after return */
 	break;
-#endif
 
     default:
         return SECFailure;
@@ -771,9 +730,10 @@ finish_des:
 /* decode the algid and generate a PKCS 5 parameter from it
  */
 NSSPKCS5PBEParameter *
-nsspkcs5_NewParam(SECOidTag alg, SECItem *salt, int iterator)
+nsspkcs5_NewParam(SECOidTag alg, HASH_HashType hashType, SECItem *salt,
+                  int iterationCount)
 {
-    PRArenaPool *arena = NULL;
+    PLArenaPool *arena = NULL;
     NSSPKCS5PBEParameter *pbe_param = NULL;
     SECStatus rv = SECFailure;
 
@@ -791,12 +751,12 @@ nsspkcs5_NewParam(SECOidTag alg, SECItem *salt, int iterator)
 
     pbe_param->poolp = arena;
 
-    rv = nsspkcs5_FillInParam(alg, pbe_param);
+    rv = nsspkcs5_FillInParam(alg, hashType, pbe_param);
     if (rv != SECSuccess) {
 	goto loser;
     }
 
-    pbe_param->iter = iterator;
+    pbe_param->iter = iterationCount;
     if (salt) {
 	rv = SECITEM_CopyItem(arena,&pbe_param->salt,salt);
     }
@@ -855,7 +815,7 @@ nsspkcs5_AlgidToParam(SECAlgorithmID *algid)
 	goto loser;
     }
 
-    pbe_param = nsspkcs5_NewParam(algorithm, NULL, 1);
+    pbe_param = nsspkcs5_NewParam(algorithm, HASH_AlgSHA1, NULL, 1);
     if (pbe_param == NULL) {
 	goto loser;
     }
@@ -871,7 +831,6 @@ nsspkcs5_AlgidToParam(SECAlgorithmID *algid)
 	rv = SEC_ASN1DecodeItem(pbe_param->poolp, pbe_param, 
 		NSSPKCS5PKCS12V2PBEParameterTemplate, &algid->parameters);
 	break;
-#ifdef PBKDF2
     case NSSPKCS5_PBKDF2:
 	PORT_Memset(&pbev2_param,0, sizeof(pbev2_param));
 	/* just the PBE */
@@ -906,7 +865,6 @@ nsspkcs5_AlgidToParam(SECAlgorithmID *algid)
 	    rv = SECFailure;
 	}
 	break;
-#endif
     }
 
 loser:
@@ -1309,7 +1267,7 @@ loser:
  * SECOID_DestroyAlgorithmID
  */
 SECAlgorithmID *
-nsspkcs5_CreateAlgorithmID(PRArenaPool *arena, SECOidTag algorithm, 
+nsspkcs5_CreateAlgorithmID(PLArenaPool *arena, SECOidTag algorithm,
 					NSSPKCS5PBEParameter *pbe_param)
 {
     SECAlgorithmID *algid, *ret_algid = NULL;
@@ -1348,7 +1306,6 @@ nsspkcs5_CreateAlgorithmID(PRArenaPool *arena, SECOidTag algorithm,
 	dummy = SEC_ASN1EncodeItem(arena, &der_param, pbe_param,
 	    				NSSPKCS5PKCS12V2PBEParameterTemplate);
 	break;
-#ifdef PBKDF2
     case NSSPKCS5_PBKDF2:
         if (pbe_param->keyLength.data == NULL) {
 	    dummy = SEC_ASN1EncodeInteger(pbe_param->poolp,
@@ -1379,7 +1336,6 @@ nsspkcs5_CreateAlgorithmID(PRArenaPool *arena, SECOidTag algorithm,
 	dummy = SEC_ASN1EncodeItem(arena,  &der_param, &pkcs5v2_param,
 	    				NSSPKCS5V2PBES2ParameterTemplate);
 	break;
-#endif
     default:
 	break;
     }

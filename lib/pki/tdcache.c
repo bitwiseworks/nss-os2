@@ -1,42 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Netscape security libraries.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1994-2000
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
-
-#ifdef DEBUG
-static const char CVS_ID[] = "@(#) $RCSfile: tdcache.c,v $ $Revision: 1.49 $ $Date: 2010/02/10 02:04:32 $";
-#endif /* DEBUG */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef PKIM_H
 #include "pkim.h"
@@ -365,7 +329,7 @@ nssTrustDomain_RemoveCertFromCacheLOCKED (
     nssList *subjectList;
     cache_entry *ce;
     NSSArena *arena;
-    NSSUTF8 *nickname;
+    NSSUTF8 *nickname = NULL;
 
 #ifdef DEBUG_CACHE
     log_cert_ref("attempt to remove cert", cert);
@@ -427,6 +391,7 @@ remove_token_certs(const void *k, void *v, void *a)
     nssPKIObject *object = &c->object;
     struct token_cert_dtor *dtor = a;
     PRUint32 i;
+    nssPKIObject_AddRef(object);
     nssPKIObject_Lock(object);
     for (i=0; i<object->numInstances; i++) {
 	if (object->instances[i]->token == dtor->token) {
@@ -445,6 +410,7 @@ remove_token_certs(const void *k, void *v, void *a)
 	}
     }
     nssPKIObject_Unlock(object);
+    nssPKIObject_Destroy(object);
     return;
 }
 
@@ -471,17 +437,21 @@ nssTrustDomain_RemoveTokenCertsFromCache (
     dtor.numCerts = 0;
     dtor.arrSize = arrSize;
     PZ_Lock(td->cache->lock);
-    nssHash_Iterate(td->cache->issuerAndSN, remove_token_certs, (void *)&dtor);
+    nssHash_Iterate(td->cache->issuerAndSN, remove_token_certs, &dtor);
     for (i=0; i<dtor.numCerts; i++) {
 	if (dtor.certs[i]->object.numInstances == 0) {
 	    nssTrustDomain_RemoveCertFromCacheLOCKED(td, dtor.certs[i]);
 	    dtor.certs[i] = NULL;  /* skip this cert in the second for loop */
+	} else {
+	    /* make sure it doesn't disappear on us before we finish */
+	    nssCertificate_AddRef(dtor.certs[i]);
 	}
     }
     PZ_Unlock(td->cache->lock);
     for (i=0; i<dtor.numCerts; i++) {
 	if (dtor.certs[i]) {
 	    STAN_ForceCERTCertificateUpdate(dtor.certs[i]);
+	    nssCertificate_Destroy(dtor.certs[i]);
 	}
     }
     nss_ZFreeIf(dtor.certs);
@@ -504,10 +474,10 @@ nssTrustDomain_UpdateCachedTokenCerts (
     if (count > 0) {
 	cached = nss_ZNEWARRAY(NULL, NSSCertificate *, count + 1);
 	if (!cached) {
+	    nssList_Destroy(certList);
 	    return PR_FAILURE;
 	}
 	nssList_GetArray(certList, (void **)cached, count);
-	nssList_Destroy(certList);
 	for (cp = cached; *cp; cp++) {
 	    nssCryptokiObject *instance;
 	    NSSCertificate *c = *cp;
@@ -526,6 +496,7 @@ nssTrustDomain_UpdateCachedTokenCerts (
 	}
 	nssCertificateArray_Destroy(cached);
     }
+    nssList_Destroy(certList);
     return PR_SUCCESS;
 }
 
@@ -733,7 +704,7 @@ merge_object_instances (
     for (ci = instances, i = 0; *ci; ci++, i++) {
 	nssCryptokiObject *instance = nssCryptokiObject_Clone(*ci);
 	if (instance) {
-	    if (nssPKIObject_AddInstance(to, instance) == SECSuccess) {
+	    if (nssPKIObject_AddInstance(to, instance) == PR_SUCCESS) {
 		continue;
 	    }
 	    nssCryptokiObject_Destroy(instance);
@@ -771,6 +742,7 @@ add_cert_to_cache (
 	log_cert_ref("attempted to add cert already in cache", cert);
 #endif
 	PZ_Unlock(td->cache->lock);
+        nss_ZFreeIf(certNickname);
 	/* collision - somebody else already added the cert
 	 * to the cache before this thread got around to it.
 	 */
@@ -804,14 +776,18 @@ add_cert_to_cache (
     added++;
     /* If a new subject entry was created, also need nickname and/or email */
     if (subjectList != NULL) {
+#ifdef nodef
 	PRBool handle = PR_FALSE;
+#endif
 	if (certNickname) {
 	    nssrv = add_nickname_entry(arena, td->cache, 
 						certNickname, subjectList);
 	    if (nssrv != PR_SUCCESS) {
 		goto loser;
 	    }
+#ifdef nodef
 	    handle = PR_TRUE;
+#endif
 	    added++;
 	}
 	if (cert->email) {
@@ -819,7 +795,9 @@ add_cert_to_cache (
 	    if (nssrv != PR_SUCCESS) {
 		goto loser;
 	    }
+#ifdef nodef
 	    handle = PR_TRUE;
+#endif
 	    added += 2;
 	}
 #ifdef nodef
@@ -839,8 +817,11 @@ add_cert_to_cache (
     }
     rvCert = cert;
     PZ_Unlock(td->cache->lock);
+    nss_ZFreeIf(certNickname);
     return rvCert;
 loser:
+    nss_ZFreeIf(certNickname);
+    certNickname = NULL;
     /* Remove any handles that have been created */
     subjectList = NULL;
     if (added >= 1) {
@@ -1077,32 +1058,6 @@ nssTrustDomain_GetCertForIssuerAndSNFromCache (
     return rvCert;
 }
 
-static PRStatus
-issuer_and_serial_from_encoding (
-  NSSBER *encoding, 
-  NSSDER *issuer, 
-  NSSDER *serial
-)
-{
-    SECItem derCert, derIssuer, derSerial;
-    SECStatus secrv;
-    derCert.data = (unsigned char *)encoding->data;
-    derCert.len = encoding->size;
-    secrv = CERT_IssuerNameFromDERCert(&derCert, &derIssuer);
-    if (secrv != SECSuccess) {
-	return PR_FAILURE;
-    }
-    secrv = CERT_SerialNumberFromDERCert(&derCert, &derSerial);
-    if (secrv != SECSuccess) {
-	return PR_FAILURE;
-    }
-    issuer->data = derIssuer.data;
-    issuer->size = derIssuer.len;
-    serial->data = derSerial.data;
-    serial->size = derSerial.len;
-    return PR_SUCCESS;
-}
-
 /*
  * Look for a specific cert in the cache
  */
@@ -1115,7 +1070,7 @@ nssTrustDomain_GetCertByDERFromCache (
     PRStatus nssrv = PR_FAILURE;
     NSSDER issuer, serial;
     NSSCertificate *rvCert;
-    nssrv = issuer_and_serial_from_encoding(der, &issuer, &serial);
+    nssrv = nssPKIX509_GetIssuerAndSerialFromDER(der, &issuer, &serial);
     if (nssrv != PR_SUCCESS) {
 	return NULL;
     }

@@ -1,38 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Netscape security libraries.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1994-2000
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifdef _CRTDBG_MAP_ALLOC
 #include <stdlib.h>
@@ -77,7 +45,7 @@ Usage(char *progName)
     FPS "\t\t [-c key_cipher] [-C cert_cipher]\n"
         "\t\t [-m | --key_len keyLen] [--cert_key_len certKeyLen] [-v]\n");
     FPS "\t\t [-k slotpwfile | -K slotpw]\n"
-		"\t\t [-w p12filepwfile | -W p12filefilepw]\n");
+        "\t\t [-w p12filepwfile | -W p12filepw]\n");
 
     exit(PK12UERR_USAGE);
 }
@@ -133,9 +101,6 @@ static p12uContext *
 p12u_InitContext(PRBool fileImport, char *filename)
 {
     p12uContext *p12cxt;
-    PRBool fileExist;
-
-    fileExist = fileImport;
 
     p12cxt = PORT_ZNew(p12uContext);
     if(!p12cxt) {
@@ -276,7 +241,7 @@ p12u_ucs2_ascii_conversion_function(PRBool	   toUnicode,
 }
 
 SECStatus
-P12U_UnicodeConversion(PRArenaPool *arena, SECItem *dest, SECItem *src,
+P12U_UnicodeConversion(PLArenaPool *arena, SECItem *dest, SECItem *src,
 		       PRBool toUnicode, PRBool swapBytes)
 {
     unsigned int allocLen;
@@ -560,17 +525,17 @@ loser:
 static void
 p12u_DoPKCS12ExportErrors()
 {
-    int error_value;
+    PRErrorCode error_value;
 
     error_value = PORT_GetError();
     if ((error_value == SEC_ERROR_PKCS12_UNABLE_TO_EXPORT_KEY) ||
 	(error_value == SEC_ERROR_PKCS12_UNABLE_TO_LOCATE_OBJECT_BY_NAME) ||
 	(error_value == SEC_ERROR_PKCS12_UNABLE_TO_WRITE)) {
-	fputs(SECU_ErrorStringRaw((int16)error_value), stderr);
+	fputs(SECU_Strerror(error_value), stderr);
     } else if(error_value == SEC_ERROR_USER_CANCELLED) {
 	;
     } else {
-	fputs(SECU_ErrorStringRaw(SEC_ERROR_EXPORTING_CERTIFICATES), stderr);
+	fputs(SECU_Strerror(SEC_ERROR_EXPORTING_CERTIFICATES), stderr);
     }
 }
 
@@ -590,7 +555,7 @@ p12u_WriteToExportFile(void *arg, const char *buf, unsigned long len)
 	return;
     }
 
-    writeLen = PR_Write(p12cxt->file, (unsigned char *)buf, (int32)len);
+    writeLen = PR_Write(p12cxt->file, (unsigned char *)buf, (PRInt32)len);
 
     if(writeLen != (int)len) {
 	PR_Close(p12cxt->file);
@@ -791,7 +756,7 @@ P12U_ListPKCS12File(char *in_file, PK11SlotInfo *slot,
 		    } else 
                     if (SECU_PrintSignedData(stdout, dip->der,
                             (dip->hasKey) ? "(has private key)" : "",
-                             0, SECU_PrintCertificate) != 0) {
+                             0, (SECU_PPFunc)SECU_PrintCertificate) != 0) {
                         SECU_PrintError(progName,"PKCS12 print cert bag failed");
                     }
                     if (dip->friendlyName != NULL) {

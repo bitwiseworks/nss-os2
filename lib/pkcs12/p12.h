@@ -1,38 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Netscape security libraries.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1994-2000
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 
 #ifndef _P12_H_
@@ -64,13 +32,53 @@ typedef void (PR_CALLBACK * SEC_PKCS12EncoderOutputCallback)(
 typedef void (PR_CALLBACK * SEC_PKCS12DecoderOutputCallback)(
                             void *arg, const char *buf,
                             unsigned long len);
+/*
+ * In NSS 3.12 or later, 'arg' actually points to a CERTCertificate,
+ * the 'leafCert' variable in sec_pkcs12_validate_cert in p12d.c. 
+ * See r1.35 of p12d.c ("Patch 2" in bug 321584).
+ *
+ * This callback might be called by SEC_PKCS12DecoderValidateBags each time
+ * a nickname collission is detected. The callback must return a new
+ * nickname. The returned SECItem should be of type siAsciiString,
+ * it should be allocated using:
+ *     SECITEM_AllocItem(NULL, NULL, LENGTH_OF_NEW_NICKNAME + 1)
+ * and data must contain the new nickname as a zero terminated string.
+ */
 typedef SECItem * (PR_CALLBACK * SEC_PKCS12NicknameCollisionCallback)(
                                  SECItem *old_nickname,
                                  PRBool *cancel,
                                  void *arg);
-
-
-
+/*
+ * This callback is called by SEC_PKCS12DecoderRenameCertNicknames for each
+ * certificate found in the p12 source data.
+ *
+ * cert: A decoded certificate.
+ * default_nickname: The nickname as found in the source data.
+ *                   Will be NULL if source data doesn't have nickname.
+ * new_nickname: Output parameter that may contain the renamed nickname.
+ * arg: The user data that was passed to SEC_PKCS12DecoderRenameCertNicknames.
+ *
+ * If the callback accept that NSS will use a nickname based on the
+ * default_nickname (potentially resolving conflicts), then the callback
+ * must set *new_nickname to NULL.
+ *
+ * If the callback wishes to override the nickname, it must set *new_nickname
+ * to a new SECItem which should be allocated using
+ *     SECITEM_AllocItem(NULL, NULL, LENGTH_OF_NEW_NICKNAME + 1)
+ * new_nickname->type should be set to siAsciiString, and new_nickname->data
+ * must contain the new nickname as a zero terminated string.
+ *
+ * A return value of SECFailure indicates that the renaming operation failed,
+ * and callback should release new_nickname before returning if it's already
+ * being allocated.
+ * Otherwise, the callback function must return SECSuccess, including use
+ * default nickname as mentioned above.
+ */
+typedef SECStatus (PR_CALLBACK * SEC_PKCS12NicknameRenameCallback)(
+                                 const CERTCertificate *cert,
+                                 const SECItem *default_nickname,
+                                 SECItem **new_nickname,
+                                 void *arg);
 
 typedef SECStatus (PR_CALLBACK *digestOpenFn)(void *arg, PRBool readData);
 typedef SECStatus (PR_CALLBACK *digestCloseFn)(void *arg, PRBool removeFile);
@@ -193,6 +201,26 @@ SEC_PKCS12DecoderVerify(SEC_PKCS12DecoderContext *p12dcx);
 extern SECStatus
 SEC_PKCS12DecoderValidateBags(SEC_PKCS12DecoderContext *p12dcx,
 			      SEC_PKCS12NicknameCollisionCallback nicknameCb);
+
+/*
+ * SEC_PKCS12DecoderRenameCertNicknames() can be used to change
+ * certificate nicknames in SEC_PKCS12DecoderContext, prior to calling
+ * SEC_PKCS12DecoderImportBags.
+ *
+ * arg: User-defined data that will be passed to nicknameCb.
+ *
+ * If SEC_PKCS12DecoderRenameCertNicknames() is called after calling
+ * SEC_PKCS12DecoderValidateBags(), then only the certificate nickname
+ * will be changed.
+ * If SEC_PKCS12DecoderRenameCertNicknames() is called prior to calling
+ * SEC_PKCS12DecoderValidateBags(), then SEC_PKCS12DecoderValidateBags()
+ * will change the nickname of the corresponding private key, too.
+ */
+extern SECStatus
+SEC_PKCS12DecoderRenameCertNicknames(SEC_PKCS12DecoderContext *p12dcx,
+                                     SEC_PKCS12NicknameRenameCallback nicknameCb,
+                                     void *arg);
+
 
 extern SECStatus
 SEC_PKCS12DecoderImportBags(SEC_PKCS12DecoderContext *p12dcx);

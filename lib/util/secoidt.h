@@ -1,39 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Netscape security libraries.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1994-2000
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Dr Vipul Gupta <vipul.gupta@sun.com>, Sun Microsystems Laboratories
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #ifndef _SECOIDT_H_
 #define _SECOIDT_H_
@@ -42,8 +9,6 @@
 
 /*
  * secoidt.h - public data structures for ASN.1 OID functions
- *
- * $Id: secoidt.h,v 1.31 2010/05/28 01:26:07 wtc%google.com Exp $
  */
 
 #include "secitem.h"
@@ -274,6 +239,9 @@ typedef enum {
     SEC_OID_X942_DIFFIE_HELMAN_KEY = 174,
 
     /* Netscape other name types */
+    /* SEC_OID_NETSCAPE_NICKNAME is an otherName field of type IA5String
+     * in the subjectAltName certificate extension.  NSS dropped support
+     * for SEC_OID_NETSCAPE_NICKNAME in NSS 3.13. */
     SEC_OID_NETSCAPE_NICKNAME = 175,
 
     /* Cert Server OIDS */
@@ -456,6 +424,63 @@ typedef enum {
     SEC_OID_PKCS1_RSA_PSS_SIGNATURE         = 307,
     SEC_OID_PKCS1_SHA224_WITH_RSA_ENCRYPTION = 308,
 
+    SEC_OID_SHA224                          = 309,
+
+    SEC_OID_EV_INCORPORATION_LOCALITY       = 310,
+    SEC_OID_EV_INCORPORATION_STATE          = 311,
+    SEC_OID_EV_INCORPORATION_COUNTRY        = 312,
+    SEC_OID_BUSINESS_CATEGORY               = 313,
+
+    SEC_OID_NIST_DSA_SIGNATURE_WITH_SHA224_DIGEST     = 314,
+    SEC_OID_NIST_DSA_SIGNATURE_WITH_SHA256_DIGEST     = 315,
+
+    /* Microsoft Trust List Signing
+     * szOID_KP_CTL_USAGE_SIGNING 
+     * where KP stands for Key Purpose
+     */
+    SEC_OID_MS_EXT_KEY_USAGE_CTL_SIGNING    = 316,
+
+    /* The 'name' attribute type in X.520 */
+    SEC_OID_AVA_NAME                        = 317,
+
+
+    SEC_OID_AES_128_GCM        		    = 318,
+    SEC_OID_AES_192_GCM 		    = 319,
+    SEC_OID_AES_256_GCM 		    = 320,
+    SEC_OID_IDEA_CBC 			    = 321,
+
+    /* pseudo - OIDs */
+
+    SEC_OID_RC2_40_CBC 			    = 322,
+    SEC_OID_DES_40_CBC 			    = 323,
+    SEC_OID_RC4_40 			    = 324,
+    SEC_OID_RC4_56 			    = 325,
+    SEC_OID_NULL_CIPHER                     = 326,
+
+    SEC_OID_HMAC_MD5                        = 327,
+
+    SEC_OID_TLS_RSA                         = 328,
+    SEC_OID_TLS_DHE_RSA                     = 329,
+    SEC_OID_TLS_DHE_DSS                     = 330,
+    SEC_OID_TLS_DH_RSA                      = 331,
+    SEC_OID_TLS_DH_DSS                      = 332,
+    SEC_OID_TLS_DH_ANON                     = 333,
+    SEC_OID_TLS_ECDHE_ECDSA                 = 334,
+    SEC_OID_TLS_ECDHE_RSA                   = 335,
+    SEC_OID_TLS_ECDH_ECDSA                  = 336,
+    SEC_OID_TLS_ECDH_RSA                    = 337,
+    SEC_OID_TLS_ECDH_ANON                   = 338,
+    SEC_OID_TLS_RSA_EXPORT                  = 339,
+
+    SEC_OID_TLS_DHE_RSA_EXPORT         = 340,
+    SEC_OID_TLS_DHE_DSS_EXPORT         = 341,
+    SEC_OID_TLS_DH_RSA_EXPORT          = 342,
+    SEC_OID_TLS_DH_DSS_EXPORT          = 343,
+    SEC_OID_TLS_DH_ANON_EXPORT         = 344,
+    SEC_OID_APPLY_SSL_POLICY           = 345,
+
+    SEC_OID_CHACHA20_POLY1305          = 346,
+
     SEC_OID_TOTAL
 } SECOidTag;
 
@@ -489,6 +514,9 @@ struct SECOidDataStr {
  */
 #define NSS_USE_ALG_IN_CERT_SIGNATURE  0x00000001  /* CRLs and OCSP, too */
 #define NSS_USE_ALG_IN_CMS_SIGNATURE   0x00000002  /* used in S/MIME */
+#define NSS_USE_ALG_IN_SSL_KX          0x00000004  /* used in SSL key exchange */
+#define NSS_USE_ALG_IN_SSL             0x00000008  /* used in SSL record protocol */
+#define NSS_USE_POLICY_IN_SSL          0x00000010  /* enable policy in SSL protocol */
 #define NSS_USE_ALG_RESERVED           0xfffffffc  /* may be used in future */
 
 /* Code MUST NOT SET or CLEAR reserved bits, and must NOT depend on them

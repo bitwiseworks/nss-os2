@@ -1,42 +1,8 @@
 #! /bin/bash
 #
-# ***** BEGIN LICENSE BLOCK *****
-# Version: MPL 1.1/GPL 2.0/LGPL 2.1
-#
-# The contents of this file are subject to the Mozilla Public License Version
-# 1.1 (the "License"); you may not use this file except in compliance with
-# the License. You may obtain a copy of the License at
-# http://www.mozilla.org/MPL/
-#
-# Software distributed under the License is distributed on an "AS IS" basis,
-# WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
-# for the specific language governing rights and limitations under the
-# License.
-#
-# The Original Code is the Netscape security libraries.
-#
-# The Initial Developer of the Original Code is
-# Netscape Communications Corporation.
-# Portions created by the Initial Developer are Copyright (C) 1994-2009
-# the Initial Developer. All Rights Reserved.
-#
-# Contributor(s):
-#   Dr Vipul Gupta <vipul.gupta@sun.com>, Sun Microsystems Laboratories
-#   Slavomir Katuscak <slavomir.katuscak@sun.com>, Sun Microsystems
-#
-# Alternatively, the contents of this file may be used under the terms of
-# either the GNU General Public License Version 2 or later (the "GPL"), or
-# the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
-# in which case the provisions of the GPL or the LGPL are applicable instead
-# of those above. If you wish to allow use of your version of this file only
-# under the terms of either the GPL or the LGPL, and not to allow others to
-# use your version of this file under the terms of the MPL, indicate your
-# decision by deleting the provisions above and replace them with the notice
-# and other provisions required by the GPL or the LGPL. If you do not delete
-# the provisions above, a recipient may use your version of this file under
-# the terms of any one of the MPL, the GPL or the LGPL.
-#
-# ***** END LICENSE BLOCK *****
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 ########################################################################
 #
@@ -92,13 +58,14 @@ ssl_init()
 
   PORT=${PORT-8443}
   NSS_SSL_TESTS=${NSS_SSL_TESTS:-normal_normal}
-  nss_ssl_run="cov auth stress"
+  nss_ssl_run="stapling signed_cert_timestamps cov auth stress"
   NSS_SSL_RUN=${NSS_SSL_RUN:-$nss_ssl_run}
 
   # Test case files
   SSLCOV=${QADIR}/ssl/sslcov.txt
   SSLAUTH=${QADIR}/ssl/sslauth.txt
   SSLSTRESS=${QADIR}/ssl/sslstress.txt
+  SSLPOLICY=${QADIR}/ssl/sslpolicy.txt
   REQUEST_FILE=${QADIR}/ssl/sslreq.dat
 
   #temparary files
@@ -116,14 +83,16 @@ ssl_init()
   USER_NICKNAME=TestUser
   NORM_EXT=""
 
-  if [ -n "$NSS_ENABLE_ECC" ] ; then
+  if [ -z "$NSS_DISABLE_ECC" ] ; then
       ECC_STRING=" - with ECC"
+      # List of cipher suites to test, including ECC cipher suites.
+      CIPHER_SUITES="-c ABCDEF:C001:C002:C003:C004:C005:C006:C007:C008:C009:C00A:C00B:C00C:C00D:C00E:C00F:C010:C011:C012:C013:C014:C023:C027:C02B:C02F:CCA8:CCA9:CCAA:0016:0032:0033:0038:0039:003B:003C:003D:0040:0041:0067:006A:006B:0084:009C:009E:00A2cdefgijklmnvyz"
   else
       ECC_STRING=""
+      # List of cipher suites to test, excluding ECC cipher suites.
+      CIPHER_SUITES="-c ABCDEF:0016:0032:0033:0038:0039:003B:003C:003D:0040:0041:0067:006A:006B:0084:009C:009E:00A2:CCAAcdefgijklmnvyz"
   fi
 
-  CSHORT="-c ABCDEF:0041:0084cdefgijklmnvyz"
-  CLONG="-c ABCDEF:C001:C002:C003:C004:C005:C006:C007:C008:C009:C00A:C00B:C00C:C00D:C00E:C00F:C010:C011:C012:C013:C014:0041:0084cdefgijklmnvyz"
 
   if [ "${OS_ARCH}" != "WINNT" ]; then
       ulimit -n 1000 # make sure we have enough file descriptors
@@ -236,7 +205,7 @@ start_selfserv()
       echo "$SCRIPTNAME: $testname ----"
   fi
   sparam=`echo $sparam | sed -e 's;_; ;g'`
-  if [ -n "$NSS_ENABLE_ECC" ] && \
+  if [ -z "$NSS_DISABLE_ECC" ] && \
      [ -z "$NO_ECC_CERTS" -o "$NO_ECC_CERTS" != "1"  ] ; then
       ECC_OPTIONS="-e ${HOSTADDR}-ec"
   else
@@ -247,15 +216,16 @@ start_selfserv()
   fi
   echo "selfserv starting at `date`"
   echo "selfserv -D -p ${PORT} -d ${P_R_SERVERDIR} -n ${HOSTADDR} ${SERVER_OPTIONS} \\"
-  echo "         ${ECC_OPTIONS} -w nss ${sparam} -i ${R_SERVERPID} $verbose &"
+  echo "         ${ECC_OPTIONS} -S ${HOSTADDR}-dsa -w nss ${sparam} -i ${R_SERVERPID}\\"
+  echo "         $verbose -H 1 &"
   if [ ${fileout} -eq 1 ]; then
       ${PROFTOOL} ${BINDIR}/selfserv -D -p ${PORT} -d ${P_R_SERVERDIR} -n ${HOSTADDR} ${SERVER_OPTIONS} \
-               ${ECC_OPTIONS} -w nss ${sparam} -i ${R_SERVERPID} $verbose \
+               ${ECC_OPTIONS} -S ${HOSTADDR}-dsa -w nss ${sparam} -i ${R_SERVERPID} $verbose -H 1 \
                > ${SERVEROUTFILE} 2>&1 &
       RET=$?
   else
       ${PROFTOOL} ${BINDIR}/selfserv -D -p ${PORT} -d ${P_R_SERVERDIR} -n ${HOSTADDR} ${SERVER_OPTIONS} \
-               ${ECC_OPTIONS} -w nss ${sparam} -i ${R_SERVERPID} $verbose &
+               ${ECC_OPTIONS} -S ${HOSTADDR}-dsa -w nss ${sparam} -i ${R_SERVERPID} $verbose -H 1 &
       RET=$?
   fi
 
@@ -292,34 +262,51 @@ ssl_cov()
   html_head "SSL Cipher Coverage $NORM_EXT - server $SERVER_MODE/client $CLIENT_MODE $ECC_STRING"
 
   testname=""
-  if [ -n "$NSS_ENABLE_ECC" ] ; then
-      sparam="$CLONG"
-  else
-      sparam="$CSHORT"
-  fi
+  sparam="$CIPHER_SUITES"
 
   mixed=0
   start_selfserv # Launch the server
+
+  VMIN="ssl2"
+  VMAX="tls1.1"
                
   exec < ${SSLCOV}
-  while read ectype tls param testname
+  while read ectype testmax param testname
   do
       echo "${testname}" | grep "EXPORT" > /dev/null 
       EXP=$?
       echo "${testname}" | grep "SSL2" > /dev/null
       SSL2=$?
+
+      if [ "${SSL2}" -eq 0 ] ; then
+          # We cannot use asynchronous cert verification with SSL2
+          SSL2_FLAGS=-O
+          VMIN="ssl2"
+      else
+          # Do not enable SSL2 for non-SSL2-specific tests. SSL2 is disabled by
+          # default in libssl but it is enabled by default in tstclnt; we want
+          # to test the libssl default whenever possible.
+          SSL2_FLAGS=
+          VMIN="ssl3"
+      fi
       
       if [ "$NORM_EXT" = "Extended Test" -a "${SSL2}" -eq 0 ] ; then
           echo "$SCRIPTNAME: skipping  $testname for $NORM_EXT"
-      elif [ "$ectype" = "ECC" -a -z "$NSS_ENABLE_ECC" ] ; then
+      elif [ "$ectype" = "ECC" -a -n "$NSS_DISABLE_ECC" ] ; then
           echo "$SCRIPTNAME: skipping  $testname (ECC only)"
       elif [ "$SERVER_MODE" = "fips" -o "$CLIENT_MODE" = "fips" ] && [ "$SSL2" -eq 0 -o "$EXP" -eq 0 ] ; then
           echo "$SCRIPTNAME: skipping  $testname (non-FIPS only)"
       elif [ "`echo $ectype | cut -b 1`" != "#" ] ; then
           echo "$SCRIPTNAME: running $testname ----------------------------"
-          TLS_FLAG=-T
-          if [ "$tls" = "TLS" ]; then
-              TLS_FLAG=""
+          VMAX="ssl3"
+          if [ "$testmax" = "TLS10" ]; then
+              VMAX="tls1.0"
+          fi
+          if [ "$testmax" = "TLS11" ]; then
+              VMAX="tls1.1"
+          fi
+          if [ "$testmax" = "TLS12" ]; then
+              VMAX="tls1.2"
           fi
 
 # These five tests need an EC cert signed with RSA
@@ -350,11 +337,11 @@ ssl_cov()
             fi
           fi
 
-          echo "tstclnt -p ${PORT} -h ${HOSTADDR} -c ${param} ${TLS_FLAG} ${CLIENT_OPTIONS} \\"
+          echo "tstclnt -p ${PORT} -h ${HOSTADDR} -c ${param} -V ${VMIN}:${VMAX} ${SSL2_FLAGS} ${CLIENT_OPTIONS} \\"
           echo "        -f -d ${P_R_CLIENTDIR} -v -w nss < ${REQUEST_FILE}"
 
           rm ${TMP}/$HOST.tmp.$$ 2>/dev/null
-          ${PROFTOOL} ${BINDIR}/tstclnt -p ${PORT} -h ${HOSTADDR} -c ${param} ${TLS_FLAG} ${CLIENT_OPTIONS} -f \
+          ${PROFTOOL} ${BINDIR}/tstclnt -p ${PORT} -h ${HOSTADDR} -c ${param} -V ${VMIN}:${VMAX} ${SSL2_FLAGS} ${CLIENT_OPTIONS} -f \
                   -d ${P_R_CLIENTDIR} -v -w nss < ${REQUEST_FILE} \
                   >${TMP}/$HOST.tmp.$$  2>&1
           ret=$?
@@ -387,7 +374,7 @@ ssl_auth()
           echo "$SCRIPTNAME: skipping  $testname (non-FIPS only)"
       elif [ "$ectype" = "SNI" -a "$NORM_EXT" = "Extended Test" ] ; then
           echo "$SCRIPTNAME: skipping  $testname for $NORM_EXT"
-      elif [ "$ectype" = "ECC" -a  -z "$NSS_ENABLE_ECC" ] ; then
+      elif [ "$ectype" = "ECC" -a  -n "$NSS_DISABLE_ECC" ] ; then
           echo "$SCRIPTNAME: skipping  $testname (ECC only)"
       elif [ "`echo $ectype | cut -b 1`" != "#" ]; then
           cparam=`echo $cparam | sed -e 's;_; ;g' -e "s/TestUser/$USER_NICKNAME/g" `
@@ -420,6 +407,168 @@ ssl_auth()
   html "</TABLE><BR>"
 }
 
+ssl_stapling_sub()
+{
+    testname=$1
+    SO=$2
+    value=$3
+
+    if [ "$NORM_EXT" = "Extended Test" ] ; then
+	# these tests use the ext_client directory for tstclnt,
+	# which doesn't contain the required "TestCA" for server cert
+	# verification, I don't know if it would be OK to add it...
+	echo "$SCRIPTNAME: skipping  $testname for $NORM_EXT"
+	return 0
+    fi
+    if [ "$SERVER_MODE" = "fips" -o "$CLIENT_MODE" = "fips" ] ; then
+          echo "$SCRIPTNAME: skipping  $testname (non-FIPS only)"
+	return 0
+    fi
+
+    SAVE_SERVER_OPTIONS=${SERVER_OPTIONS}
+    SERVER_OPTIONS="${SERVER_OPTIONS} ${SO}"
+
+    SAVE_P_R_SERVERDIR=${P_R_SERVERDIR}
+    P_R_SERVERDIR=${P_R_SERVERDIR}/../stapling/
+
+    echo "${testname}"
+
+    start_selfserv
+
+    echo "tstclnt -p ${PORT} -h ${HOSTADDR} -f -d ${P_R_CLIENTDIR} -v ${CLIENT_OPTIONS} \\"
+    echo "        -c v -T -O -F -M 1 -V ssl3: < ${REQUEST_FILE}"
+    rm ${TMP}/$HOST.tmp.$$ 2>/dev/null
+    ${PROFTOOL} ${BINDIR}/tstclnt -p ${PORT} -h ${HOSTADDR} -f ${CLIENT_OPTIONS} \
+	    -d ${P_R_CLIENTDIR} -v -c v -T -O -F -M 1 -V ssl3: < ${REQUEST_FILE} \
+	    >${TMP}/$HOST.tmp.$$  2>&1
+    ret=$?
+    cat ${TMP}/$HOST.tmp.$$
+    rm ${TMP}/$HOST.tmp.$$ 2>/dev/null
+
+    # hopefully no workaround for bug #402058 needed here?
+    # (see commands in ssl_auth
+
+    html_msg $ret $value "${testname}" \
+	    "produced a returncode of $ret, expected is $value"
+    kill_selfserv
+
+    SERVER_OPTIONS=${SAVE_SERVER_OPTIONS}
+    P_R_SERVERDIR=${SAVE_P_R_SERVERDIR}
+}
+
+ssl_stapling_stress()
+{
+    testname="Stress OCSP stapling, server uses random status"
+    SO="-A TestCA -T random"
+    value=0
+
+    if [ "$NORM_EXT" = "Extended Test" ] ; then
+	# these tests use the ext_client directory for tstclnt,
+	# which doesn't contain the required "TestCA" for server cert
+	# verification, I don't know if it would be OK to add it...
+	echo "$SCRIPTNAME: skipping  $testname for $NORM_EXT"
+	return 0
+    fi
+    if [ "$SERVER_MODE" = "fips" -o "$CLIENT_MODE" = "fips" ] ; then
+          echo "$SCRIPTNAME: skipping  $testname (non-FIPS only)"
+	return 0
+    fi
+
+    SAVE_SERVER_OPTIONS=${SERVER_OPTIONS}
+    SERVER_OPTIONS="${SERVER_OPTIONS} ${SO}"
+
+    SAVE_P_R_SERVERDIR=${P_R_SERVERDIR}
+    P_R_SERVERDIR=${P_R_SERVERDIR}/../stapling/
+
+    echo "${testname}"
+    start_selfserv
+
+    echo "strsclnt -q -p ${PORT} -d ${P_R_CLIENTDIR} ${CLIENT_OPTIONS} -w nss \\"
+    echo "         -c 1000 -V ssl3: -N -T $verbose ${HOSTADDR}"
+    echo "strsclnt started at `date`"
+    ${PROFTOOL} ${BINDIR}/strsclnt -q -p ${PORT} -d ${P_R_CLIENTDIR} ${CLIENT_OPTIONS} -w nss \
+	    -c 1000 -V ssl3: -N -T $verbose ${HOSTADDR}
+    ret=$?
+
+    echo "strsclnt completed at `date`"
+    html_msg $ret $value \
+	    "${testname}" \
+	    "produced a returncode of $ret, expected is $value."
+    kill_selfserv
+
+    SERVER_OPTIONS=${SAVE_SERVER_OPTIONS}
+    P_R_SERVERDIR=${SAVE_P_R_SERVERDIR}
+}
+
+############################ ssl_stapling ##############################
+# local shell function to perform SSL Cert Status (OCSP Stapling) tests
+########################################################################
+ssl_stapling()
+{
+  html_head "SSL Cert Status (OCSP Stapling) $NORM_EXT - server $SERVER_MODE/client $CLIENT_MODE $ECC_STRING"
+
+  # tstclnt Exit code:
+  # 0: have fresh and valid revocation data, status good
+  # 1: cert failed to verify, prior to revocation checking
+  # 2: missing, old or invalid revocation data
+  # 3: have fresh and valid revocation data, status revoked
+
+  # selfserv modes
+  # good, revoked, unkown: Include locally signed response. Requires: -A
+  # failure: Include OCSP failure status, such as "try later" (unsigned)
+  # badsig: use a good status but with an invalid signature
+  # corrupted: stapled cert status is an invalid block of data
+
+  ssl_stapling_sub "OCSP stapling, signed response, good status"     "-A TestCA -T good"      0
+  ssl_stapling_sub "OCSP stapling, signed response, revoked status"  "-A TestCA -T revoked"   3
+  ssl_stapling_sub "OCSP stapling, signed response, unknown status"  "-A TestCA -T unknown"   2
+  ssl_stapling_sub "OCSP stapling, unsigned failure response"        "-A TestCA -T failure"   2
+  ssl_stapling_sub "OCSP stapling, good status, bad signature"       "-A TestCA -T badsig"    2
+  ssl_stapling_sub "OCSP stapling, invalid cert status data"         "-A TestCA -T corrupted" 2
+  ssl_stapling_sub "Valid cert, Server doesn't staple"               ""                       2
+
+  ssl_stapling_stress
+
+  html "</TABLE><BR>"
+}
+
+############################ ssl_signed_cert_timestamps #################
+# local shell function to perform SSL Signed Certificate Timestamp tests
+#########################################################################
+ssl_signed_cert_timestamps()
+{
+  html_head "SSL Signed Certificate Timestamps $NORM_EXT - server $SERVER_MODE/client $CLIENT_MODE $ECC_STRING"
+
+    testname="ssl_signed_cert_timestamps"
+    value=0
+
+    if [ "$SERVER_MODE" = "fips" -o "$CLIENT_MODE" = "fips" ] ; then
+          echo "$SCRIPTNAME: skipping  $testname (non-FIPS only)"
+        return 0
+    fi
+
+    echo "${testname}"
+
+    start_selfserv
+
+    # Since we don't have server-side support, this test only covers advertising the
+    # extension in the client hello.
+    echo "tstclnt -p ${PORT} -h ${HOSTADDR} -f -d ${P_R_CLIENTDIR} -v ${CLIENT_OPTIONS} \\"
+    echo "        -U -V tls1.0: < ${REQUEST_FILE}"
+    rm ${TMP}/$HOST.tmp.$$ 2>/dev/null
+    ${PROFTOOL} ${BINDIR}/tstclnt -p ${PORT} -h ${HOSTADDR} -f ${CLIENT_OPTIONS} \
+            -d ${P_R_CLIENTDIR} -v -U -V tls1.0: < ${REQUEST_FILE} \
+            >${TMP}/$HOST.tmp.$$  2>&1
+    ret=$?
+    cat ${TMP}/$HOST.tmp.$$
+    rm ${TMP}/$HOST.tmp.$$ 2>/dev/null
+
+    html_msg $ret $value "${testname}" \
+            "produced a returncode of $ret, expected is $value"
+    kill_selfserv
+  html "</TABLE><BR>"
+}
+
 
 ############################## ssl_stress ##############################
 # local shell function to perform SSL stress test
@@ -445,7 +594,7 @@ ssl_stress()
           echo "$SCRIPTNAME: skipping  $testname for $NORM_EXT"
       elif [ "$ectype" = "SNI" -a "$NORM_EXT" = "Extended Test" ] ; then
           echo "$SCRIPTNAME: skipping  $testname for $NORM_EXT"
-      elif [ "$ectype" = "ECC" -a  -z "$NSS_ENABLE_ECC" ] ; then
+      elif [ "$ectype" = "ECC" -a  -n "$NSS_DISABLE_ECC" ] ; then
           echo "$SCRIPTNAME: skipping  $testname (ECC only)"
       elif [ "${SERVER_MODE}" = "fips" -o "${CLIENT_MODE}" = "fips" ] && [ "${SSL2}" -eq 0 ] ; then
           echo "$SCRIPTNAME: skipping  $testname (non-FIPS only)"
@@ -511,7 +660,7 @@ ssl_crl_ssl()
   while read ectype value sparam cparam testname
   do
     [ "$ectype" = "" ] && continue
-    if [ "$ectype" = "ECC" -a  -z "$NSS_ENABLE_ECC" ] ; then
+    if [ "$ectype" = "ECC" -a  -n "$NSS_DISABLE_ECC" ] ; then
         echo "$SCRIPTNAME: skipping $testname (ECC only)"
     elif [ "$ectype" = "SNI" ]; then
         continue
@@ -572,6 +721,123 @@ ssl_crl_ssl()
   html "</TABLE><BR>"
 }
 
+############################## ssl_cov #################################
+# local shell function to perform SSL Policy tests
+########################################################################
+ssl_policy()
+{
+  html_head "SSL POLICY $NORM_EXT - server $SERVER_MODE/client $CLIENT_MODE $ECC_STRING"
+
+  testname=""
+  sparam="$CIPHER_SUITES"
+
+  if [ ! -f "${P_R_CLIENTDIR}/pkcs11.txt" ] ; then
+      return;
+  fi
+
+  echo "Saving pkcs11.txt"
+  cp ${P_R_CLIENTDIR}/pkcs11.txt ${P_R_CLIENTDIR}/pkcs11.txt.sav
+
+  mixed=0
+  start_selfserv # Launch the server
+
+  VMIN="ssl3"
+  VMAX="tls1.2"
+
+  exec < ${SSLPOLICY}
+  while read value ectype testmax param policy testname
+  do
+      SSL2_FLAGS=
+      VMIN="ssl3"
+
+      if [ "$ectype" = "ECC" -a -n "$NSS_DISABLE_ECC" ] ; then
+          echo "$SCRIPTNAME: skipping  $testname (ECC only)"
+      elif [ "`echo $value | cut -b 1`" != "#" ] ; then
+          echo "$SCRIPTNAME: running $testname ----------------------------"
+          VMAX="ssl3"
+          if [ "$testmax" = "TLS10" ]; then
+              VMAX="tls1.0"
+          fi
+          if [ "$testmax" = "TLS11" ]; then
+              VMAX="tls1.1"
+          fi
+          if [ "$testmax" = "TLS12" ]; then
+              VMAX="tls1.2"
+          fi
+
+# These five tests need an EC cert signed with RSA
+# This requires a different certificate loaded in selfserv
+# due to a (current) NSS limitation of only loaded one cert
+# per type so the default selfserv setup will not work.
+#:C00B TLS ECDH RSA WITH NULL SHA
+#:C00C TLS ECDH RSA WITH RC4 128 SHA
+#:C00D TLS ECDH RSA WITH 3DES EDE CBC SHA
+#:C00E TLS ECDH RSA WITH AES 128 CBC SHA
+#:C00F TLS ECDH RSA WITH AES 256 CBC SHA
+
+          if [ $mixed -eq 0 ]; then
+            if [ "${param}" = ":C00B" -o "${param}" = ":C00C" -o "${param}" = ":C00D" -o "${param}" = ":C00E" -o "${param}" = ":C00F" ]; then
+              kill_selfserv
+              start_selfserv mixed
+              mixed=1
+            else
+              is_selfserv_alive
+            fi
+          else
+            if [ "${param}" = ":C00B" -o "${param}" = ":C00C" -o "${param}" = ":C00D" -o "${param}" = ":C00E" -o "${param}" = ":C00F" ]; then
+              is_selfserv_alive
+            else
+              kill_selfserv
+              start_selfserv
+              mixed=0
+            fi
+          fi
+
+          # load the policy
+          policy=`echo ${policy} | sed -e 's;_; ;g'`
+
+          cat  > ${P_R_CLIENTDIR}/pkcs11.txt << ++EOF++
+library=
+name=NSS Internal PKCS #11 Module
+parameters=configdir='./client' certPrefix='' keyPrefix='' secmod='secmod.db' flags= updatedir='' updateCertPrefix='' updateKeyPrefix='' updateid='' updateTokenDescription='' 
+NSS=Flags=internal,critical trustOrder=75 cipherOrder=100 slotParams=(1={slotFlags=[RSA,DSA,DH,RC2,RC4,DES,RANDOM,SHA1,MD5,MD2,SSL,TLS,AES,Camellia,SEED,SHA256,SHA512] askpw=any timeout=30})
+++EOF++
+          echo "config=${policy}" >> ${P_R_CLIENTDIR}/pkcs11.txt
+          echo "" >> ${P_R_CLIENTDIR}/pkcs11.txt
+          echo "library=${DIST}/${OBJDIR}/lib/libnssckbi.so" >> ${P_R_CLIENTDIR}/pkcs11.txt >> ${P_R_CLIENTDIR}/pkcs11.txt
+          cat  >> ${P_R_CLIENTDIR}/pkcs11.txt << ++EOF++
+name=RootCerts
+NSS=trustOrder=100
+++EOF++
+
+          echo "******************************Testing with: "
+	  cat ${P_R_CLIENTDIR}/pkcs11.txt
+          echo "******************************"
+
+          echo "tstclnt -p ${PORT} -h ${HOSTADDR} -c ${param} -V ${VMIN}:${VMAX} ${CLIENT_OPTIONS} \\"
+          echo "        -f -d ${P_R_CLIENTDIR} -v -w nss < ${REQUEST_FILE}"
+
+          rm ${TMP}/$HOST.tmp.$$ 2>/dev/null
+          ${PROFTOOL} ${BINDIR}/tstclnt -p ${PORT} -h ${HOSTADDR} -c ${param} -V ${VMIN}:${VMAX} ${CLIENT_OPTIONS} -f \
+                  -d ${P_R_CLIENTDIR} -v -w nss < ${REQUEST_FILE} \
+                  >${TMP}/$HOST.tmp.$$  2>&1
+          ret=$?
+          cat ${TMP}/$HOST.tmp.$$ 
+          rm ${TMP}/$HOST.tmp.$$ 2>/dev/null
+
+          #workaround for bug #402058
+          [ $ret -ne 0 ] && ret=1
+          [ ${value} -ne 0 ] && value=1
+
+          html_msg $ret ${value} "${testname}" \
+                   "produced a returncode of $ret, expected is ${value}"
+      fi
+  done
+  cp ${P_R_CLIENTDIR}/pkcs11.txt.sav ${P_R_CLIENTDIR}/pkcs11.txt
+
+  kill_selfserv
+  html "</TABLE><BR>"
+}
 ############################# is_revoked ###############################
 # local shell function to check if certificate is revoked
 ########################################################################
@@ -641,17 +907,22 @@ load_group_crl() {
         echo "================= Reloading ${eccomment}CRL for group $grpBegin - $grpEnd ============="
 
         echo "tstclnt -p ${PORT} -h ${HOSTADDR} -f -d ${R_CLIENTDIR} -v \\"
-        echo "          -2 -w nss -n TestUser${UNREVOKED_CERT_GRP_1}${ecsuffix}"
+        echo "          -V ssl3: -w nss -n TestUser${UNREVOKED_CERT_GRP_1}${ecsuffix}"
         echo "Request:"
         echo "GET crl://${SERVERDIR}/root.crl_${grpBegin}-${grpEnd}${ecsuffix}"
         echo ""
         echo "RELOAD time $i"
-        ${PROFTOOL} ${BINDIR}/tstclnt -p ${PORT} -h ${HOSTADDR} -f  \
-            -d ${R_CLIENTDIR} -v -2 -w nss -n TestUser${UNREVOKED_CERT_GRP_1}${ecsuffix} \
-	    >${OUTFILE_TMP}  2>&1 <<_EOF_REQUEST_
+
+        REQF=${R_CLIENTDIR}.crlreq
+        cat > ${REQF} <<_EOF_REQUEST_
 GET crl://${SERVERDIR}/root.crl_${grpBegin}-${grpEnd}${ecsuffix}
 
 _EOF_REQUEST_
+
+        ${PROFTOOL} ${BINDIR}/tstclnt -p ${PORT} -h ${HOSTADDR} -f  \
+            -d ${R_CLIENTDIR} -v -V ssl3: -w nss -n TestUser${UNREVOKED_CERT_GRP_1}${ecsuffix} \
+            >${OUTFILE_TMP}  2>&1 < ${REQF}
+
         cat ${OUTFILE_TMP}
         grep "CRL ReCache Error" ${OUTFILE_TMP}
         if [ $? -eq 0 ]; then
@@ -677,6 +948,7 @@ _EOF_REQUEST_
     echo "================= CRL Reloaded ============="
 }
 
+
 ########################### ssl_crl_cache ##############################
 # local shell function to perform SSL test for crl cache functionality
 # with/out revoked certs 
@@ -699,7 +971,7 @@ ssl_crl_cache()
     while read ectype value sparam cparam testname
       do
       [ "$ectype" = "" ] && continue
-      if [ "$ectype" = "ECC" -a  -z "$NSS_ENABLE_ECC" ] ; then
+      if [ "$ectype" = "ECC" -a  -n "$NSS_DISABLE_ECC" ] ; then
         echo "$SCRIPTNAME: skipping  $testname (ECC only)"
       elif [ "$ectype" = "SNI" ]; then
           continue
@@ -812,6 +1084,12 @@ ssl_run()
     for SSL_RUN in ${NSS_SSL_RUN}
     do
         case "${SSL_RUN}" in
+        "stapling")
+            ssl_stapling
+            ;;
+        "signed_cert_timestamps")
+            ssl_signed_cert_timestamps
+            ;;
         "cov")
             ssl_cov
             ;;
@@ -880,7 +1158,7 @@ ssl_set_fips()
     if [ ${CLTSRV} = "server" ]; then
         DBDIRS="${SERVERDIR} ${EXT_SERVERDIR}"
     else
-        DBDIRS="${CLIETNDIR} ${EXT_CLIENTDIR}"
+        DBDIRS="${CLIENTDIR} ${EXT_CLIENTDIR}"
     fi
     
     if [ "${ONOFF}" = "on" ]; then
@@ -932,6 +1210,11 @@ ssl_run_tests()
     for SSL_TEST in ${NSS_SSL_TESTS}
     do
         case "${SSL_TEST}" in
+        "policy")
+            if [ "${TEST_MODE}" = "SHARED_DB" ] ; then
+	        ssl_policy
+            fi
+            ;;
         "crl")
             ssl_crl_ssl
             ssl_crl_cache

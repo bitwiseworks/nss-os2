@@ -1,53 +1,17 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Netscape security libraries.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1994-2000
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
-
-#ifdef DEBUG
-static const char CVS_ID[] = "@(#) $RCSfile: error.c,v $ $Revision: 1.9 $ $Date: 2008/05/17 03:44:39 $";
-#endif /* DEBUG */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
  * error.c
  *
- * This file contains the code implementing the per-thread error 
+ * This file contains the code implementing the per-thread error
  * stacks upon which most NSS routines report their errors.
  */
 
 #ifndef BASE_H
 #include "base.h"
-#endif /* BASE_H */
+#endif              /* BASE_H */
 #include <limits.h> /* for UINT_MAX */
 #include <string.h> /* for memmove */
 
@@ -61,13 +25,13 @@ static const char CVS_ID[] = "@(#) $RCSfile: error.c,v $ $Revision: 1.9 $ $Date:
  */
 
 struct stack_header_str {
-  PRUint16 space;
-  PRUint16 count;
+    PRUint16 space;
+    PRUint16 count;
 };
 
 struct error_stack_str {
-  struct stack_header_str header;
-  PRInt32 stack[1];
+    struct stack_header_str header;
+    PRInt32 stack[1];
 };
 typedef struct error_stack_str error_stack;
 
@@ -98,9 +62,9 @@ static PRCallOnceType error_call_once;
  * This is the once-called callback.
  */
 static PRStatus
-error_once_function ( void)
+error_once_function(void)
 {
-  return PR_NewThreadPrivateIndex(&error_stack_index, PR_Free);
+    return PR_NewThreadPrivateIndex(&error_stack_index, PR_Free);
 }
 
 /*
@@ -112,48 +76,48 @@ error_once_function ( void)
  */
 
 static error_stack *
-error_get_my_stack ( void)
+error_get_my_stack(void)
 {
-  PRStatus st;
-  error_stack *rv;
-  PRUintn new_size;
-  PRUint32 new_bytes;
-  error_stack *new_stack;
+    PRStatus st;
+    error_stack *rv;
+    PRUintn new_size;
+    PRUint32 new_bytes;
+    error_stack *new_stack;
 
-  if( INVALID_TPD_INDEX == error_stack_index ) {
-    st = PR_CallOnce(&error_call_once, error_once_function);
-    if( PR_SUCCESS != st ) {
-      return (error_stack *)NULL;
+    if (INVALID_TPD_INDEX == error_stack_index) {
+        st = PR_CallOnce(&error_call_once, error_once_function);
+        if (PR_SUCCESS != st) {
+            return (error_stack *)NULL;
+        }
     }
-  }
 
-  rv = (error_stack *)PR_GetThreadPrivate(error_stack_index);
-  if( (error_stack *)NULL == rv ) {
-    /* Doesn't exist; create one */
-    new_size = 16;
-  } else if( rv->header.count == rv->header.space  &&
-             rv->header.count  < NSS_MAX_ERROR_STACK_COUNT ) {
-    /* Too small, expand it */
-    new_size = PR_MIN( rv->header.space * 2, NSS_MAX_ERROR_STACK_COUNT);
-  } else {
-    /* Okay, return it */
-    return rv;
-  }
-
-  new_bytes = (new_size * sizeof(PRInt32)) + sizeof(error_stack);
-  /* Use NSPR's calloc/realloc, not NSS's, to avoid loops! */
-  new_stack = PR_Calloc(1, new_bytes);
-  
-  if( (error_stack *)NULL != new_stack ) {
-    if( (error_stack *)NULL != rv ) {
-	(void)nsslibc_memcpy(new_stack,rv,rv->header.space);
+    rv = (error_stack *)PR_GetThreadPrivate(error_stack_index);
+    if ((error_stack *)NULL == rv) {
+        /* Doesn't exist; create one */
+        new_size = 16;
+    } else if (rv->header.count == rv->header.space &&
+               rv->header.count < NSS_MAX_ERROR_STACK_COUNT) {
+        /* Too small, expand it */
+        new_size = PR_MIN(rv->header.space * 2, NSS_MAX_ERROR_STACK_COUNT);
+    } else {
+        /* Okay, return it */
+        return rv;
     }
-    new_stack->header.space = new_size;
-  }
 
-  /* Set the value, whether or not the allocation worked */
-  PR_SetThreadPrivate(error_stack_index, new_stack);
-  return new_stack;
+    new_bytes = (new_size * sizeof(PRInt32)) + sizeof(error_stack);
+    /* Use NSPR's calloc/realloc, not NSS's, to avoid loops! */
+    new_stack = PR_Calloc(1, new_bytes);
+
+    if ((error_stack *)NULL != new_stack) {
+        if ((error_stack *)NULL != rv) {
+            (void)nsslibc_memcpy(new_stack, rv, rv->header.space);
+        }
+        new_stack->header.space = new_size;
+    }
+
+    /* Set the value, whether or not the allocation worked */
+    PR_SetThreadPrivate(error_stack_index, new_stack);
+    return new_stack;
 }
 
 /*
@@ -187,19 +151,19 @@ error_get_my_stack ( void)
  */
 
 NSS_IMPLEMENT PRInt32
-NSS_GetError ( void)
+NSS_GetError(void)
 {
-  error_stack *es = error_get_my_stack();
+    error_stack *es = error_get_my_stack();
 
-  if( (error_stack *)NULL == es ) {
-    return NSS_ERROR_NO_MEMORY; /* Good guess! */
-  }
+    if ((error_stack *)NULL == es) {
+        return NSS_ERROR_NO_MEMORY; /* Good guess! */
+    }
 
-  if( 0 == es->header.count ) {
-    return 0;
-  }
+    if (0 == es->header.count) {
+        return 0;
+    }
 
-  return es->stack[ es->header.count-1 ];
+    return es->stack[es->header.count - 1];
 }
 
 /*
@@ -210,7 +174,7 @@ NSS_GetError ( void)
  * library routine called by the same thread calling this routine.
  * NOTE: the caller DOES NOT OWN the memory pointed to by the return
  * value.  The pointer will remain valid until the calling thread
- * calls another NSS routine.  The lowest-level (most specific) error 
+ * calls another NSS routine.  The lowest-level (most specific) error
  * is first in the array, and the highest-level is last.  The array is
  * zero-terminated.  This routine may return NULL upon error; this
  * indicates a low-memory situation.
@@ -221,52 +185,52 @@ NSS_GetError ( void)
  */
 
 NSS_IMPLEMENT PRInt32 *
-NSS_GetErrorStack ( void)
+NSS_GetErrorStack(void)
 {
-  error_stack *es = error_get_my_stack();
+    error_stack *es = error_get_my_stack();
 
-  if( (error_stack *)NULL == es ) {
-    return (PRInt32 *)NULL;
-  }
+    if ((error_stack *)NULL == es) {
+        return (PRInt32 *)NULL;
+    }
 
-  /* Make sure it's terminated */
-  es->stack[ es->header.count ] = 0;
+    /* Make sure it's terminated */
+    es->stack[es->header.count] = 0;
 
-  return es->stack;
+    return es->stack;
 }
 
 /*
  * nss_SetError
  *
- * This routine places a new error code on the top of the calling 
+ * This routine places a new error code on the top of the calling
  * thread's error stack.  Calling this routine wiht an error code
  * of zero will clear the error stack.
  */
 
 NSS_IMPLEMENT void
-nss_SetError ( PRUint32 error)
+nss_SetError(PRUint32 error)
 {
-  error_stack *es;
+    error_stack *es;
 
-  if( 0 == error ) {
-    nss_ClearErrorStack();
+    if (0 == error) {
+        nss_ClearErrorStack();
+        return;
+    }
+
+    es = error_get_my_stack();
+    if ((error_stack *)NULL == es) {
+        /* Oh, well. */
+        return;
+    }
+
+    if (es->header.count < es->header.space) {
+        es->stack[es->header.count++] = error;
+    } else {
+        memmove(es->stack, es->stack + 1,
+                (es->header.space - 1) * (sizeof es->stack[0]));
+        es->stack[es->header.space - 1] = error;
+    }
     return;
-  }
-
-  es = error_get_my_stack();
-  if( (error_stack *)NULL == es ) {
-    /* Oh, well. */
-    return;
-  }
-
-  if (es->header.count < es->header.space) {
-    es->stack[ es->header.count++ ] = error;
-  } else {
-    memmove(es->stack, es->stack + 1, 
-		(es->header.space - 1) * (sizeof es->stack[0]));
-    es->stack[ es->header.space - 1 ] = error;
-  }
-  return;
 }
 
 /*
@@ -276,17 +240,17 @@ nss_SetError ( PRUint32 error)
  */
 
 NSS_IMPLEMENT void
-nss_ClearErrorStack ( void)
+nss_ClearErrorStack(void)
 {
-  error_stack *es = error_get_my_stack();
-  if( (error_stack *)NULL == es ) {
-    /* Oh, well. */
-    return;
-  }
+    error_stack *es = error_get_my_stack();
+    if ((error_stack *)NULL == es) {
+        /* Oh, well. */
+        return;
+    }
 
-  es->header.count = 0;
-  es->stack[0] = 0;
-  return;
+    es->header.count = 0;
+    es->stack[0] = 0;
+    return;
 }
 
 /*
@@ -296,10 +260,10 @@ nss_ClearErrorStack ( void)
  */
 
 NSS_IMPLEMENT void
-nss_DestroyErrorStack ( void)
+nss_DestroyErrorStack(void)
 {
-  if( INVALID_TPD_INDEX != error_stack_index ) {
-    PR_SetThreadPrivate(error_stack_index, NULL);
-  }
-  return;
+    if (INVALID_TPD_INDEX != error_stack_index) {
+        PR_SetThreadPrivate(error_stack_index, NULL);
+    }
+    return;
 }

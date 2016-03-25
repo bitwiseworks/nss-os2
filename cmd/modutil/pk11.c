@@ -1,49 +1,13 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Netscape security libraries.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1994-2000
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-/* To edit this file, set TABSTOPS to 4 spaces. 
- * This is not the normal NSS convention. 
+/* To edit this file, set TABSTOPS to 4 spaces.
+ * This is not the normal NSS convention.
  */
 
 #include "modutil.h"
-/* #include "secmodti.h"  */
 #include "pk11func.h"
-
-static PK11DefaultArrayEntry *pk11_DefaultArray = NULL;
-static int pk11_DefaultArraySize = 0;
 
 /*************************************************************************
  *
@@ -142,32 +106,9 @@ ChkFipsMode(char *arg)
 
 typedef struct {
     const char *name;
-    const unsigned long mask;
+    unsigned long mask;
 } MaskString;
 
-static const MaskString mechanismStrings[] = {
-    {"RSA", PUBLIC_MECH_RSA_FLAG},
-    {"DSA", PUBLIC_MECH_DSA_FLAG},
-    {"RC2", PUBLIC_MECH_RC2_FLAG},
-    {"RC4", PUBLIC_MECH_RC4_FLAG},
-    {"RC5", PUBLIC_MECH_RC5_FLAG},
-    {"DES", PUBLIC_MECH_DES_FLAG},
-    {"DH", PUBLIC_MECH_DH_FLAG},
-    {"FORTEZZA", PUBLIC_MECH_FORTEZZA_FLAG},
-    {"SHA1", PUBLIC_MECH_SHA1_FLAG},
-    {"MD5", PUBLIC_MECH_MD5_FLAG},
-    {"MD2", PUBLIC_MECH_MD2_FLAG},
-    {"SSL", PUBLIC_MECH_SSL_FLAG},
-    {"TLS", PUBLIC_MECH_TLS_FLAG},
-    {"AES", PUBLIC_MECH_AES_FLAG},
-    {"CAMELLIA", PUBLIC_MECH_CAMELLIA_FLAG},
-    {"SHA256", PUBLIC_MECH_SHA256_FLAG},
-    {"SHA512", PUBLIC_MECH_SHA512_FLAG},
-    {"RANDOM", PUBLIC_MECH_RANDOM_FLAG},
-    {"FRIENDLY", PUBLIC_MECH_FRIENDLY_FLAG}
-};
-static const int numMechanismStrings =
-    sizeof(mechanismStrings) / sizeof(mechanismStrings[0]);
 
 static const MaskString cipherStrings[] = {
     {"FORTEZZA", PUBLIC_CIPHER_FORTEZZA_FLAG}
@@ -175,9 +116,67 @@ static const MaskString cipherStrings[] = {
 static const int numCipherStrings =
     sizeof(cipherStrings) / sizeof(cipherStrings[0]);
 
-/* Maximum length of a colon-separated list of all the strings in an 
+/* Initialized by LoadMechanismList */
+static MaskString *mechanismStrings =  NULL;
+static int numMechanismStrings = 0;
+const static PK11DefaultArrayEntry *pk11_DefaultArray = NULL;
+static int pk11_DefaultArraySize = 0;
+
+/* Maximum length of a colon-separated list of all the strings in an
  * array. */
 #define MAX_STRING_LIST_LEN 240    /* or less */
+
+
+Error
+LoadMechanismList(void)
+{
+    int i;
+
+    if (pk11_DefaultArray == NULL) {
+        pk11_DefaultArray = PK11_GetDefaultArray(&pk11_DefaultArraySize);
+        if (pk11_DefaultArray == NULL) {
+            /* should assert. This shouldn't happen */
+            return UNSPECIFIED_ERR;
+        }
+    }
+    if (mechanismStrings != NULL) {
+	return SUCCESS;
+    }
+
+    /* build the mechanismStrings array */
+    mechanismStrings = PORT_NewArray(MaskString, pk11_DefaultArraySize);
+    if (mechanismStrings == NULL) {
+	return OUT_OF_MEM_ERR;
+    }
+    numMechanismStrings = pk11_DefaultArraySize;
+    for (i = 0; i < numMechanismStrings; i++) {
+	const char *name = pk11_DefaultArray[i].name;
+	unsigned long flag = pk11_DefaultArray[i].flag;
+	/* map new name to old */
+	switch (flag) {
+	case SECMOD_FORTEZZA_FLAG:
+	    name = "FORTEZZA";
+	    break;
+	case SECMOD_SHA1_FLAG:
+	    name = "SHA1";
+	    break;
+	case SECMOD_CAMELLIA_FLAG:
+	    name = "CAMELLIA";
+	    break;
+	case SECMOD_RANDOM_FLAG:
+	    name = "RANDOM";
+	    break;
+	case SECMOD_FRIENDLY_FLAG:
+	    name = "FRIENDLY";
+	    break;
+	default:
+	    break;
+	}
+	mechanismStrings[i].name = name;
+	mechanismStrings[i].mask = SECMOD_InternaltoPubMechFlags(flag);
+    }
+    return SUCCESS;
+}
 
 /************************************************************************
  * 
@@ -713,6 +712,8 @@ ChangePW(char *tokenName, char *pwFile, char *newpwFile)
 	    newpw2 = SECU_GetPasswordString(NULL, "Re-enter new password: ");
 	    if(strcmp(newpw, newpw2)) {
 		PR_fprintf(PR_STDOUT, msgStrings[PW_MATCH_MSG]);
+		PORT_ZFree(newpw, strlen(newpw));
+		PORT_ZFree(newpw2, strlen(newpw2));
 	    } else {
 		matching = PR_TRUE;
 	    }
@@ -739,16 +740,13 @@ ChangePW(char *tokenName, char *pwFile, char *newpwFile)
 
 loser:
     if(oldpw) {
-	memset(oldpw, 0, strlen(oldpw));
-	PORT_Free(oldpw);
+	PORT_ZFree(oldpw, strlen(oldpw));
     }
     if(newpw) {
-	memset(newpw, 0, strlen(newpw));
-	PORT_Free(newpw);
+	PORT_ZFree(newpw, strlen(newpw));
     }
     if(newpw2) {
-	memset(newpw2, 0, strlen(newpw2));
-	PORT_Free(newpw2);
+	PORT_ZFree(newpw2, strlen(newpw2));
     }
     PK11_FreeSlot(slot);
 
@@ -848,14 +846,6 @@ SetDefaultModule(char *moduleName, char *slotName, char *mechanisms)
     PRBool found = PR_FALSE;
     Error errcode = UNSPECIFIED_ERR;
 
-    if (pk11_DefaultArray == NULL) {
-	pk11_DefaultArray = PK11_GetDefaultArray(&pk11_DefaultArraySize);
-	if (pk11_DefaultArray == NULL) {
-	    /* should assert. This shouldn't happen */
-	    goto loser;
-	}
-    }
-
     mechFlags =  SECMOD_PubMechFlagstoInternal(mechFlags);
 
     module = SECMOD_FindModule(moduleName);
@@ -925,15 +915,6 @@ UnsetDefaultModule(char *moduleName, char *slotName, char *mechanisms)
 	mechanismStrings, numMechanismStrings);
     PRBool found = PR_FALSE;
     Error rv;
-
-    if (pk11_DefaultArray == NULL) {
-	pk11_DefaultArray = PK11_GetDefaultArray(&pk11_DefaultArraySize);
-	if (pk11_DefaultArray == NULL) {
-	    /* should assert. This shouldn't happen */
-	    rv = UNSPECIFIED_ERR;
-            goto loser;
-	}
-    }
 
     mechFlags =  SECMOD_PubMechFlagstoInternal(mechFlags);
 

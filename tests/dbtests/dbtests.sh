@@ -1,41 +1,8 @@
 #! /bin/bash
 #
-# ***** BEGIN LICENSE BLOCK *****
-# Version: MPL 1.1/GPL 2.0/LGPL 2.1
-#
-# The contents of this file are subject to the Mozilla Public License Version
-# 1.1 (the "License"); you may not use this file except in compliance with
-# the License. You may obtain a copy of the License at
-# http://www.mozilla.org/MPL/
-#
-# Software distributed under the License is distributed on an "AS IS" basis,
-# WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
-# for the specific language governing rights and limitations under the
-# License.
-#
-# The Original Code is the Netscape security libraries.
-#
-# The Initial Developer of the Original Code is
-# Netscape Communications Corporation.
-# Portions created by the Initial Developer are Copyright (C) 1994-2009
-# the Initial Developer. All Rights Reserved.
-#
-# Contributor(s):
-#   Sonja Mirtitsch Sun Microsystems
-#
-# Alternatively, the contents of this file may be used under the terms of
-# either the GNU General Public License Version 2 or later (the "GPL"), or
-# the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
-# in which case the provisions of the GPL or the LGPL are applicable instead
-# of those above. If you wish to allow use of your version of this file only
-# under the terms of either the GPL or the LGPL, and not to allow others to
-# use your version of this file under the terms of the MPL, indicate your
-# decision by deleting the provisions above and replace them with the notice
-# and other provisions required by the GPL or the LGPL. If you do not delete
-# the provisions above, a recipient may use your version of this file under
-# the terms of any one of the MPL, the GPL or the LGPL.
-#
-# ***** END LICENSE BLOCK *****
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 ########################################################################
 #
@@ -201,19 +168,29 @@ dbtest_main()
         cat $RONLY_DIR/* > /dev/null
     fi
 
-    ${BINDIR}/dbtest -d $RONLY_DIR
+    # skipping the next two tests when user is root,
+    # otherwise they would fail due to rooty powers
+    if [ $UID -ne 0 ]; then
+      ${BINDIR}/dbtest -d $RONLY_DIR
     ret=$?
     if [ $ret -ne 46 ]; then
-      html_failed "Dbtest r/w succeeded in an readonly directory $ret"
+      html_failed "Dbtest r/w succeeded in a readonly directory $ret"
     else
       html_passed "Dbtest r/w didn't work in an readonly dir $ret" 
     fi
-    ${BINDIR}/certutil -D -n "TestUser" -d .
+    else
+      html_passed "Skipping Dbtest r/w in a readonly dir because user is root"
+    fi
+    if [ $UID -ne 0 ]; then
+      ${BINDIR}/certutil -D -n "TestUser" -d .
     ret=$?
     if [ $ret -ne 255 ]; then
-      html_failed "Certutil succeeded in deleting a cert in an readonly directory $ret"
+      html_failed "Certutil succeeded in deleting a cert in a readonly directory $ret"
     else
-        html_passed "Certutil didn't work in an readonly dir $ret"
+      html_passed "Certutil didn't work in an readonly dir $ret"
+    fi
+    else
+        html_passed "Skipping Certutil delete cert in a readonly directory test because user is root" 
     fi
     
     Echo "test opening the database ronly in a readonly directory"

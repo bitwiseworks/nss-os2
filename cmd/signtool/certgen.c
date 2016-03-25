@@ -1,38 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Netscape security libraries.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1994-2000
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "signtool.h"
 
@@ -105,6 +73,9 @@ GenerateCert(char *nickname, int keysize, char *token)
     LL_L2UI(serial, PR_Now());
 
     subject = GetSubjectFromUser(serial);
+    if (!subject) {
+	FatalError("Unable to get subject from user");
+    }
 
     cert = GenerateSelfSignedObjectSigningCert(nickname, db, subject,
          		serial, keysize, token);
@@ -154,7 +125,9 @@ GetSubjectFromUser(unsigned long serial)
 #else
     PR_fprintf(PR_STDOUT, "certificate common name: ");
 #endif
-    fgets(buf, STDIN_BUF_SIZE, stdin);
+    if (!fgets(buf, STDIN_BUF_SIZE, stdin)) {
+	return NULL;
+    }
     cp = chop(buf);
     if (*cp == '\0') {
 	sprintf(common_name_buf, "%s (%lu)", DEFAULT_COMMON_NAME,
@@ -176,7 +149,9 @@ GetSubjectFromUser(unsigned long serial)
 #else
     PR_fprintf(PR_STDOUT, "organization: ");
 #endif
-    fgets(buf, STDIN_BUF_SIZE, stdin);
+    if (!fgets(buf, STDIN_BUF_SIZE, stdin)) {
+	return NULL;
+    }
     cp = chop(buf);
     if (*cp != '\0') {
 	org = PORT_ZAlloc(strlen(cp) + 5);
@@ -195,7 +170,9 @@ GetSubjectFromUser(unsigned long serial)
 #else
     PR_fprintf(PR_STDOUT, "organization unit: ");
 #endif
-    fgets(buf, STDIN_BUF_SIZE, stdin);
+    if (!fgets(buf, STDIN_BUF_SIZE, stdin)) {
+	return NULL;
+    }
     cp = chop(buf);
     if (*cp != '\0') {
 	orgunit = PORT_ZAlloc(strlen(cp) + 6);
@@ -213,7 +190,9 @@ GetSubjectFromUser(unsigned long serial)
 #else
     PR_fprintf(PR_STDOUT, "state or province: ");
 #endif
-    fgets(buf, STDIN_BUF_SIZE, stdin);
+    if (!fgets(buf, STDIN_BUF_SIZE, stdin)) {
+	return NULL;
+    }
     cp = chop(buf);
     if (*cp != '\0') {
 	state = PORT_ZAlloc(strlen(cp) + 6);
@@ -231,7 +210,9 @@ GetSubjectFromUser(unsigned long serial)
 #else
     PR_fprintf(PR_STDOUT, "country (must be exactly 2 characters): ");
 #endif
-    fgets(buf, STDIN_BUF_SIZE, stdin);
+    if (!fgets(buf, STDIN_BUF_SIZE, stdin)) {
+	return NULL;
+    }
     cp = chop(cp);
     if (strlen(cp) != 2) {
 	*cp = '\0';	/* country code must be 2 chars */
@@ -252,7 +233,9 @@ GetSubjectFromUser(unsigned long serial)
 #else
     PR_fprintf(PR_STDOUT, "username: ");
 #endif
-    fgets(buf, STDIN_BUF_SIZE, stdin);
+    if (!fgets(buf, STDIN_BUF_SIZE, stdin)) {
+	return NULL;
+    }
     cp = chop(buf);
     if (*cp != '\0') {
 	uid = PORT_ZAlloc(strlen(cp) + 7);
@@ -270,7 +253,9 @@ GetSubjectFromUser(unsigned long serial)
 #else
     PR_fprintf(PR_STDOUT, "email address: ");
 #endif
-    fgets(buf, STDIN_BUF_SIZE, stdin);
+    if (!fgets(buf, STDIN_BUF_SIZE, stdin)) {
+	return NULL;
+    }
     cp = chop(buf);
     if (*cp != '\0') {
 	email = PORT_ZAlloc(strlen(cp) + 5);
@@ -452,7 +437,6 @@ sign_cert(CERTCertificate *cert, SECKEYPrivateKey *privk)
     SECItem der2;
     SECItem * result2;
 
-    void	*dummy;
     SECOidTag alg = SEC_OID_UNKNOWN;
 
     alg = SEC_GetSignatureAlgorithmOidTag(privk->keyType, SEC_OID_UNKNOWN);
@@ -472,7 +456,7 @@ sign_cert(CERTCertificate *cert, SECKEYPrivateKey *privk)
     der2.len = 0;
     der2.data = NULL;
 
-    dummy = SEC_ASN1EncodeItem
+    (void)SEC_ASN1EncodeItem
         (cert->arena, &der2, cert, SEC_ASN1_GET(CERT_CertificateTemplate));
 
     if (rv != SECSuccess) {

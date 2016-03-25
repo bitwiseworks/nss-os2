@@ -1,38 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Netscape security libraries.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1994-2000
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "plgetopt.h"
 #include "secutil.h"
@@ -67,13 +35,24 @@ output_binary (void *arg, const unsigned char *obuf, PRInt32 size)
     return nb;
 }
 
+static PRBool
+isBase64Char(char c)
+{
+    return ((c >= 'A' && c <= 'Z')
+	    || (c >= 'a' && c <= 'z')
+	    || (c >= '0' && c <= '9')
+	    || c == '+'
+	    || c == '/'
+	    || c == '=');
+}
+
 static SECStatus
 decode_file(FILE *outFile, FILE *inFile)
 {
     NSSBase64Decoder *cx;
-    int nb;
     SECStatus status = SECFailure;
     char ibuf[4096];
+    const char *ptr;
 
     cx = NSSBase64Decoder_Create(output_binary, outFile);
     if (!cx) {
@@ -82,19 +61,29 @@ decode_file(FILE *outFile, FILE *inFile)
 
     for (;;) {
 	if (feof(inFile)) break;
-	nb = fread(ibuf, 1, sizeof(ibuf), inFile);
-	if (nb != sizeof(ibuf)) {
-	    if (nb == 0) {
-		if (ferror(inFile)) {
-		    PORT_SetError(SEC_ERROR_IO);
-		    goto loser;
-		}
-		/* eof */
-		break;
+	if (!fgets(ibuf, sizeof(ibuf), inFile)) {
+	    if (ferror(inFile)) {
+		PORT_SetError(SEC_ERROR_IO);
+		goto loser;
+	    }
+	    /* eof */
+	    break;
+	}
+	for (ptr = ibuf; *ptr; ++ptr) {
+	    char c = *ptr;
+	    if (c == '\n' || c == '\r') {
+		break; /* found end of line */
+	    }
+	    if (!isBase64Char(c)) {
+	      ptr = ibuf; /* ignore line */
+	      break;
 	    }
 	}
+	if (ibuf == ptr) {
+	    continue; /* skip empty or non-base64 line */
+	}
 
-	status = NSSBase64Decoder_Update(cx, ibuf, nb);
+	status = NSSBase64Decoder_Update(cx, ibuf, ptr-ibuf);
 	if (status != SECSuccess) goto loser;
     }
 
@@ -131,10 +120,11 @@ int main(int argc, char **argv)
     progName = progName ? progName+1 : argv[0];
 
     /* Parse command line arguments */
-    optstate = PL_CreateOptState(argc, argv, "i:o:");
+    optstate = PL_CreateOptState(argc, argv, "?hi:o:");
     while ((status = PL_GetNextOpt(optstate)) == PL_OPT_OK) {
 	switch (optstate->option) {
 	  case '?':
+	  case 'h':
 	    Usage(progName);
 	    break;
 

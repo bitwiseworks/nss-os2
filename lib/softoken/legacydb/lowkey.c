@@ -1,39 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Netscape security libraries.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1994-2000
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Dr Vipul Gupta <vipul.gupta@sun.com>, Sun Microsystems Laboratories
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 #include "lowkeyi.h" 
 #include "secoid.h" 
 #include "secitem.h"
@@ -59,7 +26,7 @@ static const SEC_ASN1Template nsslowkey_SetOfAttributeTemplate[] = {
     { SEC_ASN1_SET_OF, 0, nsslowkey_AttributeTemplate },
 };
 /* ASN1 Templates for new decoder/encoder */
-const SEC_ASN1Template nsslowkey_PrivateKeyInfoTemplate[] = {
+const SEC_ASN1Template lg_nsslowkey_PrivateKeyInfoTemplate[] = {
     { SEC_ASN1_SEQUENCE,
 	0, NULL, sizeof(NSSLOWKEYPrivateKeyInfo) },
     { SEC_ASN1_INTEGER,
@@ -75,15 +42,15 @@ const SEC_ASN1Template nsslowkey_PrivateKeyInfoTemplate[] = {
     { 0 }
 };
 
-const SEC_ASN1Template nsslowkey_PQGParamsTemplate[] = {
+const SEC_ASN1Template lg_nsslowkey_PQGParamsTemplate[] = {
     { SEC_ASN1_SEQUENCE, 0, NULL, sizeof(PQGParams) },
     { SEC_ASN1_INTEGER, offsetof(PQGParams,prime) },
     { SEC_ASN1_INTEGER, offsetof(PQGParams,subPrime) },
     { SEC_ASN1_INTEGER, offsetof(PQGParams,base) },
-    { 0, }
+    { 0 }
 };
 
-const SEC_ASN1Template nsslowkey_RSAPrivateKeyTemplate[] = {
+const SEC_ASN1Template lg_nsslowkey_RSAPrivateKeyTemplate[] = {
     { SEC_ASN1_SEQUENCE, 0, NULL, sizeof(NSSLOWKEYPrivateKey) },
     { SEC_ASN1_INTEGER, offsetof(NSSLOWKEYPrivateKey,u.rsa.version) },
     { SEC_ASN1_INTEGER, offsetof(NSSLOWKEYPrivateKey,u.rsa.modulus) },
@@ -97,39 +64,53 @@ const SEC_ASN1Template nsslowkey_RSAPrivateKeyTemplate[] = {
     { 0 }                                                                     
 };                                                                            
 
+/*
+ * Allows u.rsa.modulus to be zero length for secret keys with an empty
+ * CKA_ID incorrectly generated in NSS 3.13.3 or earlier.  Only used for
+ * decoding.  See bug 715073.
+ */
+const SEC_ASN1Template lg_nsslowkey_RSAPrivateKeyTemplate2[] = {
+    { SEC_ASN1_SEQUENCE, 0, NULL, sizeof(NSSLOWKEYPrivateKey) },
+    { SEC_ASN1_INTEGER, offsetof(NSSLOWKEYPrivateKey,u.rsa.version) },
+    { SEC_ASN1_ANY, offsetof(NSSLOWKEYPrivateKey,u.rsa.modulus) },
+    { SEC_ASN1_INTEGER, offsetof(NSSLOWKEYPrivateKey,u.rsa.publicExponent) },
+    { SEC_ASN1_INTEGER, offsetof(NSSLOWKEYPrivateKey,u.rsa.privateExponent) },
+    { SEC_ASN1_INTEGER, offsetof(NSSLOWKEYPrivateKey,u.rsa.prime1) },
+    { SEC_ASN1_INTEGER, offsetof(NSSLOWKEYPrivateKey,u.rsa.prime2) },
+    { SEC_ASN1_INTEGER, offsetof(NSSLOWKEYPrivateKey,u.rsa.exponent1) },
+    { SEC_ASN1_INTEGER, offsetof(NSSLOWKEYPrivateKey,u.rsa.exponent2) },
+    { SEC_ASN1_INTEGER, offsetof(NSSLOWKEYPrivateKey,u.rsa.coefficient) },
+    { 0 }
+};
 
-const SEC_ASN1Template nsslowkey_DSAPrivateKeyTemplate[] = {
+const SEC_ASN1Template lg_nsslowkey_DSAPrivateKeyTemplate[] = {
     { SEC_ASN1_SEQUENCE, 0, NULL, sizeof(NSSLOWKEYPrivateKey) },
     { SEC_ASN1_INTEGER, offsetof(NSSLOWKEYPrivateKey,u.dsa.publicValue) },
     { SEC_ASN1_INTEGER, offsetof(NSSLOWKEYPrivateKey,u.dsa.privateValue) },
-    { 0, }
+    { 0 }
 };
 
-const SEC_ASN1Template nsslowkey_DSAPrivateKeyExportTemplate[] = {
-    { SEC_ASN1_INTEGER, offsetof(NSSLOWKEYPrivateKey,u.dsa.privateValue) },
-};
-
-const SEC_ASN1Template nsslowkey_DHPrivateKeyTemplate[] = {
+const SEC_ASN1Template lg_nsslowkey_DHPrivateKeyTemplate[] = {
     { SEC_ASN1_SEQUENCE, 0, NULL, sizeof(NSSLOWKEYPrivateKey) },
     { SEC_ASN1_INTEGER, offsetof(NSSLOWKEYPrivateKey,u.dh.publicValue) },
     { SEC_ASN1_INTEGER, offsetof(NSSLOWKEYPrivateKey,u.dh.privateValue) },
     { SEC_ASN1_INTEGER, offsetof(NSSLOWKEYPrivateKey,u.dh.base) },
     { SEC_ASN1_INTEGER, offsetof(NSSLOWKEYPrivateKey,u.dh.prime) },
-    { 0, }
+    { 0 }
 };
 
-#ifdef NSS_ENABLE_ECC
+#ifndef NSS_DISABLE_ECC
 
 /* XXX This is just a placeholder for later when we support
  * generic curves and need full-blown support for parsing EC
  * parameters. For now, we only support named curves in which
  * EC params are simply encoded as an object ID and we don't
- * use nsslowkey_ECParamsTemplate.
+ * use lg_nsslowkey_ECParamsTemplate.
  */
-const SEC_ASN1Template nsslowkey_ECParamsTemplate[] = {
+const SEC_ASN1Template lg_nsslowkey_ECParamsTemplate[] = {
     { SEC_ASN1_CHOICE, offsetof(ECParams,type), NULL, sizeof(ECParams) },
     { SEC_ASN1_OBJECT_ID, offsetof(ECParams,curveOID), NULL, ec_params_named },
-    { 0, }
+    { 0 }
 };
 
 
@@ -138,7 +119,7 @@ const SEC_ASN1Template nsslowkey_ECParamsTemplate[] = {
  * in the PrivateKeyAlgorithmIdentifier field of the PrivateKeyInfo
  * instead.
  */
-const SEC_ASN1Template nsslowkey_ECPrivateKeyTemplate[] = {
+const SEC_ASN1Template lg_nsslowkey_ECPrivateKeyTemplate[] = {
     { SEC_ASN1_SEQUENCE, 0, NULL, sizeof(NSSLOWKEYPrivateKey) },
     { SEC_ASN1_INTEGER, offsetof(NSSLOWKEYPrivateKey,u.ec.version) },
     { SEC_ASN1_OCTET_STRING, 
@@ -146,7 +127,7 @@ const SEC_ASN1Template nsslowkey_ECPrivateKeyTemplate[] = {
     /* XXX The following template works for now since we only
      * support named curves for which the parameters are
      * encoded as an object ID. When we support generic curves,
-     * we'll need to define nsslowkey_ECParamsTemplate
+     * we'll need to define lg_nsslowkey_ECParamsTemplate
      */
 #if 1
     { SEC_ASN1_OPTIONAL | SEC_ASN1_CONSTRUCTED |
@@ -157,14 +138,14 @@ const SEC_ASN1Template nsslowkey_ECPrivateKeyTemplate[] = {
     { SEC_ASN1_OPTIONAL | SEC_ASN1_CONSTRUCTED |
       SEC_ASN1_EXPLICIT | SEC_ASN1_CONTEXT_SPECIFIC | 0, 
       offsetof(NSSLOWKEYPrivateKey,u.ec.ecParams), 
-      nsslowkey_ECParamsTemplate }, 
+      lg_nsslowkey_ECParamsTemplate }, 
 #endif
     { SEC_ASN1_OPTIONAL | SEC_ASN1_CONSTRUCTED |
       SEC_ASN1_EXPLICIT | SEC_ASN1_CONTEXT_SPECIFIC |
       SEC_ASN1_XTRN | 1, 
       offsetof(NSSLOWKEYPrivateKey,u.ec.publicValue),
       SEC_ASN1_SUB(SEC_BitStringTemplate) }, 
-    { 0, }
+    { 0 }
 };
 
 
@@ -173,7 +154,7 @@ const SEC_ASN1Template nsslowkey_ECPrivateKeyTemplate[] = {
  * oid and DER data.
  */
 SECStatus
-LGEC_FillParams(PRArenaPool *arena, const SECItem *encodedParams, 
+LGEC_FillParams(PLArenaPool *arena, const SECItem *encodedParams,
     ECParams *params)
 {
     SECOidTag tag;
@@ -213,7 +194,7 @@ LGEC_FillParams(PRArenaPool *arena, const SECItem *encodedParams,
 /* Copy all of the fields from srcParams into dstParams
  */
 SECStatus
-LGEC_CopyParams(PRArenaPool *arena, ECParams *dstParams,
+LGEC_CopyParams(PLArenaPool *arena, ECParams *dstParams,
 	      const ECParams *srcParams)
 {
     SECStatus rv = SECFailure;
@@ -235,7 +216,7 @@ LGEC_CopyParams(PRArenaPool *arena, ECParams *dstParams,
 loser:
     return SECFailure;
 }
-#endif /* NSS_ENABLE_ECC */
+#endif /* NSS_DISABLE_ECC */
 /*
  * See bugzilla bug 125359
  * Since NSS (via PKCS#11) wants to handle big integers as unsigned ints,
@@ -246,7 +227,7 @@ loser:
  */
 
 void
-prepare_low_rsa_priv_key_for_asn1(NSSLOWKEYPrivateKey *key)
+lg_prepare_low_rsa_priv_key_for_asn1(NSSLOWKEYPrivateKey *key)
 {
     key->u.rsa.modulus.type = siUnsignedInteger;
     key->u.rsa.publicExponent.type = siUnsignedInteger;
@@ -259,7 +240,7 @@ prepare_low_rsa_priv_key_for_asn1(NSSLOWKEYPrivateKey *key)
 }
 
 void
-prepare_low_pqg_params_for_asn1(PQGParams *params)
+lg_prepare_low_pqg_params_for_asn1(PQGParams *params)
 {
     params->prime.type = siUnsignedInteger;
     params->subPrime.type = siUnsignedInteger;
@@ -267,7 +248,7 @@ prepare_low_pqg_params_for_asn1(PQGParams *params)
 }
 
 void
-prepare_low_dsa_priv_key_for_asn1(NSSLOWKEYPrivateKey *key)
+lg_prepare_low_dsa_priv_key_for_asn1(NSSLOWKEYPrivateKey *key)
 {
     key->u.dsa.publicValue.type = siUnsignedInteger;
     key->u.dsa.privateValue.type = siUnsignedInteger;
@@ -277,13 +258,7 @@ prepare_low_dsa_priv_key_for_asn1(NSSLOWKEYPrivateKey *key)
 }
 
 void
-prepare_low_dsa_priv_key_export_for_asn1(NSSLOWKEYPrivateKey *key)
-{
-    key->u.dsa.privateValue.type = siUnsignedInteger;
-}
-
-void
-prepare_low_dh_priv_key_for_asn1(NSSLOWKEYPrivateKey *key)
+lg_prepare_low_dh_priv_key_for_asn1(NSSLOWKEYPrivateKey *key)
 {
     key->u.dh.prime.type = siUnsignedInteger;
     key->u.dh.base.type = siUnsignedInteger;
@@ -291,16 +266,16 @@ prepare_low_dh_priv_key_for_asn1(NSSLOWKEYPrivateKey *key)
     key->u.dh.privateValue.type = siUnsignedInteger;
 }
 
-#ifdef NSS_ENABLE_ECC
+#ifndef NSS_DISABLE_ECC
 void
-prepare_low_ecparams_for_asn1(ECParams *params)
+lg_prepare_low_ecparams_for_asn1(ECParams *params)
 {
     params->DEREncoding.type = siUnsignedInteger;
     params->curveOID.type = siUnsignedInteger;
 }
 
 void
-prepare_low_ec_priv_key_for_asn1(NSSLOWKEYPrivateKey *key)
+lg_prepare_low_ec_priv_key_for_asn1(NSSLOWKEYPrivateKey *key)
 {
     key->u.ec.version.type = siUnsignedInteger;
     key->u.ec.ecParams.DEREncoding.type = siUnsignedInteger;
@@ -308,10 +283,10 @@ prepare_low_ec_priv_key_for_asn1(NSSLOWKEYPrivateKey *key)
     key->u.ec.privateValue.type = siUnsignedInteger;
     key->u.ec.publicValue.type = siUnsignedInteger;
 }
-#endif /* NSS_ENABLE_ECC */
+#endif /* NSS_DISABLE_ECC */
 
 void
-nsslowkey_DestroyPrivateKey(NSSLOWKEYPrivateKey *privk)
+lg_nsslowkey_DestroyPrivateKey(NSSLOWKEYPrivateKey *privk)
 {
     if (privk && privk->arena) {
 	PORT_FreeArena(privk->arena, PR_TRUE);
@@ -319,48 +294,15 @@ nsslowkey_DestroyPrivateKey(NSSLOWKEYPrivateKey *privk)
 }
 
 void
-nsslowkey_DestroyPublicKey(NSSLOWKEYPublicKey *pubk)
+lg_nsslowkey_DestroyPublicKey(NSSLOWKEYPublicKey *pubk)
 {
     if (pubk && pubk->arena) {
 	PORT_FreeArena(pubk->arena, PR_FALSE);
     }
 }
-unsigned
-nsslowkey_PublicModulusLen(NSSLOWKEYPublicKey *pubk)
-{
-    unsigned char b0;
-
-    /* interpret modulus length as key strength... in
-     * fortezza that's the public key length */
-
-    switch (pubk->keyType) {
-    case NSSLOWKEYRSAKey:
-    	b0 = pubk->u.rsa.modulus.data[0];
-    	return b0 ? pubk->u.rsa.modulus.len : pubk->u.rsa.modulus.len - 1;
-    default:
-	break;
-    }
-    return 0;
-}
-
-unsigned
-nsslowkey_PrivateModulusLen(NSSLOWKEYPrivateKey *privk)
-{
-
-    unsigned char b0;
-
-    switch (privk->keyType) {
-    case NSSLOWKEYRSAKey:
-	b0 = privk->u.rsa.modulus.data[0];
-	return b0 ? privk->u.rsa.modulus.len : privk->u.rsa.modulus.len - 1;
-    default:
-	break;
-    }
-    return 0;
-}
 
 NSSLOWKEYPublicKey *
-nsslowkey_ConvertToPublicKey(NSSLOWKEYPrivateKey *privk)
+lg_nsslowkey_ConvertToPublicKey(NSSLOWKEYPrivateKey *privk)
 {
     NSSLOWKEYPublicKey *pubk;
     PLArenaPool *arena;
@@ -436,7 +378,7 @@ nsslowkey_ConvertToPublicKey(NSSLOWKEYPrivateKey *privk)
 	    if (rv == SECSuccess) return pubk;
 	}
 	break;
-#ifdef NSS_ENABLE_ECC
+#ifndef NSS_DISABLE_ECC
       case NSSLOWKEYECKey:
 	pubk = (NSSLOWKEYPublicKey *)PORT_ArenaZAlloc(arena,
 						    sizeof(NSSLOWKEYPublicKey));
@@ -455,7 +397,7 @@ nsslowkey_ConvertToPublicKey(NSSLOWKEYPrivateKey *privk)
 	    if (rv == SECSuccess) return pubk;
 	}
 	break;
-#endif /* NSS_ENABLE_ECC */
+#endif /* NSS_DISABLE_ECC */
 	/* No Fortezza in Low Key implementations (Fortezza keys aren't
 	 * stored in our data base */
     default:

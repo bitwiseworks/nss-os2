@@ -1,39 +1,6 @@
- /* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is Network Security Services.
- *
- * The Initial Developer of the Original Code is
- * Red Hat Inc.
- * Portions created by the Initial Developer are Copyright (C) 2009
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *	Robert Relyea <rrelyea@redhat.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 /*
  * Allow freebl and softoken to be loaded without util or NSPR.
@@ -63,12 +30,13 @@
 #include <prsystem.h>
 #include <prinrval.h>
 #include <prtime.h>
+#include <prcvar.h>
 #include <secasn1.h>
-#include <secoid.h>
 #include <secdig.h>
 #include <secport.h>
 #include <secitem.h>
 #include <blapi.h>
+#include <private/pprio.h>
 
 #define FREEBL_NO_WEAK 1
 
@@ -137,6 +105,7 @@
 
 
 STUB_DECLARE(void *,PORT_Alloc_Util,(size_t len));
+STUB_DECLARE(void *,PORT_ArenaAlloc_Util,(PLArenaPool *arena, size_t size));
 STUB_DECLARE(void *,PORT_ArenaZAlloc_Util,(PLArenaPool *arena, size_t size));
 STUB_DECLARE(void ,PORT_Free_Util,(void *ptr));
 STUB_DECLARE(void ,PORT_FreeArena_Util,(PLArenaPool *arena, PRBool zero));
@@ -150,11 +119,16 @@ STUB_DECLARE(void,PR_Assert,(const char *s, const char *file, PRIntn ln));
 STUB_DECLARE(PRStatus,PR_CallOnce,(PRCallOnceType *once, PRCallOnceFN func));
 STUB_DECLARE(PRStatus,PR_Close,(PRFileDesc *fd));
 STUB_DECLARE(void,PR_DestroyLock,(PRLock *lock));
+STUB_DECLARE(void,PR_DestroyCondVar,(PRCondVar *cvar));
 STUB_DECLARE(void,PR_Free,(void *ptr));
 STUB_DECLARE(char * ,PR_GetLibraryFilePathname,(const char *name,
 			PRFuncPtr addr));
+STUB_DECLARE(PRFileDesc *,PR_ImportPipe,(PROsfd osfd));
 STUB_DECLARE(void,PR_Lock,(PRLock *lock));
+STUB_DECLARE(PRCondVar *,PR_NewCondVar,(PRLock *lock));
 STUB_DECLARE(PRLock *,PR_NewLock,(void));
+STUB_DECLARE(PRStatus,PR_NotifyCondVar,(PRCondVar *cvar));
+STUB_DECLARE(PRStatus,PR_NotifyAllCondVar,(PRCondVar *cvar));
 STUB_DECLARE(PRFileDesc *,PR_Open,(const char *name, PRIntn flags,
 			 PRIntn mode));
 STUB_DECLARE(PRInt32,PR_Read,(PRFileDesc *fd, void *buf, PRInt32 amount));
@@ -162,15 +136,21 @@ STUB_DECLARE(PROffset32,PR_Seek,(PRFileDesc *fd, PROffset32 offset,
 			PRSeekWhence whence));
 STUB_DECLARE(PRStatus,PR_Sleep,(PRIntervalTime ticks));
 STUB_DECLARE(PRStatus,PR_Unlock,(PRLock *lock));
+STUB_DECLARE(PRStatus,PR_WaitCondVar,(PRCondVar *cvar,
+			PRIntervalTime timeout));
+STUB_DECLARE(char*,PR_GetEnvSecure,(const char *));
 
-STUB_DECLARE(SECItem *,SECITEM_AllocItem_Util,(PRArenaPool *arena, 
+
+STUB_DECLARE(SECItem *,SECITEM_AllocItem_Util,(PLArenaPool *arena,
 			SECItem *item,unsigned int len));
-STUB_DECLARE(SECComparison,SECITEM_CompareItem_Util,(const SECItem *a, 
+STUB_DECLARE(SECComparison,SECITEM_CompareItem_Util,(const SECItem *a,
 			const SECItem *b));
-STUB_DECLARE(SECStatus,SECITEM_CopyItem_Util,(PRArenaPool *arena, 
+STUB_DECLARE(SECStatus,SECITEM_CopyItem_Util,(PLArenaPool *arena,
 			SECItem *to,const SECItem *from));
 STUB_DECLARE(void,SECITEM_FreeItem_Util,(SECItem *zap, PRBool freeit));
 STUB_DECLARE(void,SECITEM_ZfreeItem_Util,(SECItem *zap, PRBool freeit));
+STUB_DECLARE(SECOidTag,SECOID_FindOIDTag_Util,(const SECItem *oid));
+STUB_DECLARE(int, NSS_SecureMemcmp,(const void *a, const void *b, size_t n));
 
 
 #define PORT_ZNew_stub(type) (type*)PORT_ZAlloc_stub(sizeof(type))
@@ -235,9 +215,18 @@ PR_Free_stub(void *ptr)
  *
  */
 extern PLArenaPool *
-PORT_NewArena_stub(unsigned long chunksize) 
+PORT_NewArena_stub(unsigned long chunksize)
 {
     STUB_SAFE_CALL1(PORT_NewArena_Util, chunksize);
+    abort();
+    return NULL;
+}
+
+extern void *
+PORT_ArenaAlloc_stub(PLArenaPool *arena, size_t size)
+{
+
+    STUB_SAFE_CALL2(PORT_ArenaZAlloc_Util, arena, size);
     abort();
     return NULL;
 }
@@ -295,6 +284,20 @@ PR_Open_stub(const char *name, PRIntn flags, PRIntn mode)
     return (PRFileDesc *)lfd;
 }
 
+extern PRFileDesc *
+PR_ImportPipe_stub(PROsfd fd)
+{
+    int *lfd = NULL;
+
+    STUB_SAFE_CALL1(PR_ImportPipe, fd);
+
+    lfd = PORT_New_stub(int);
+    if (lfd != NULL) {
+	*lfd = fd;
+    }
+    return (PRFileDesc *)lfd;
+}
+
 extern PRStatus
 PR_Close_stub(PRFileDesc *fd)
 {
@@ -322,7 +325,7 @@ extern PROffset32
 PR_Seek_stub(PRFileDesc *fd, PROffset32 offset, PRSeekWhence whence)
 {
     int *lfd;
-    int lwhence = SEEK_SET;;
+    int lwhence = SEEK_SET;
     STUB_SAFE_CALL3(PR_Seek, fd, offset, whence);
     lfd = (int *)fd;
     switch (whence) {
@@ -331,6 +334,8 @@ PR_Seek_stub(PRFileDesc *fd, PROffset32 offset, PRSeekWhence whence)
             break;
         case PR_SEEK_END:
             lwhence = SEEK_END;
+            break;
+        case PR_SEEK_SET:
             break;
     }
 
@@ -429,6 +434,55 @@ PR_DestroyLock_stub(PRLock *lock)
     return;
 }
 
+extern PRCondVar *
+PR_NewCondVar_stub(PRLock *lock)
+{
+    STUB_SAFE_CALL1(PR_NewCondVar, lock);
+    abort();
+    return NULL;
+}
+
+extern PRStatus
+PR_NotifyCondVar_stub(PRCondVar *cvar)
+{
+    STUB_SAFE_CALL1(PR_NotifyCondVar, cvar);
+    abort();
+    return PR_FAILURE;
+}
+
+extern PRStatus
+PR_NotifyAllCondVar_stub(PRCondVar *cvar)
+{
+    STUB_SAFE_CALL1(PR_NotifyAllCondVar, cvar);
+    abort();
+    return PR_FAILURE;
+}
+
+extern PRStatus
+PR_WaitCondVar_stub(PRCondVar *cvar, PRIntervalTime timeout)
+{
+    STUB_SAFE_CALL2(PR_WaitCondVar, cvar, timeout);
+    abort();
+    return PR_FAILURE;
+}
+
+extern char*
+PR_GetEnvSecure_stub(const char *var)
+{
+    STUB_SAFE_CALL1(PR_GetEnvSecure, var);
+    abort();
+    return NULL;
+}
+
+
+extern void
+PR_DestroyCondVar_stub(PRCondVar *cvar)
+{
+    STUB_SAFE_CALL1(PR_DestroyCondVar, cvar);
+    abort();
+    return;
+}
+
 /*
  * NOTE: this presupposes GCC 4.1
  */
@@ -452,7 +506,7 @@ SECITEM_FreeItem_stub(SECItem *zap, PRBool freeit)
 }
 
 extern SECItem *
-SECITEM_AllocItem_stub(PRArenaPool *arena, SECItem *item, unsigned int len)
+SECITEM_AllocItem_stub(PLArenaPool *arena, SECItem *item, unsigned int len)
 {
     STUB_SAFE_CALL3(SECITEM_AllocItem_Util, arena, item, len); 
     abort();
@@ -467,18 +521,33 @@ SECITEM_CompareItem_stub(const SECItem *a, const SECItem *b)
     return SECEqual;
 }
 
-extern SECStatus 
-SECITEM_CopyItem_stub(PRArenaPool *arena, SECItem *to, const SECItem *from)
+extern SECStatus
+SECITEM_CopyItem_stub(PLArenaPool *arena, SECItem *to, const SECItem *from)
 {
     STUB_SAFE_CALL3(SECITEM_CopyItem_Util, arena, to, from);
     abort();
     return SECFailure;
 }
 
+extern SECOidTag
+SECOID_FindOIDTag_stub(const SECItem *oid)
+{
+    STUB_SAFE_CALL1(SECOID_FindOIDTag_Util, oid);
+    abort();
+    return SEC_OID_UNKNOWN;
+}
+
 extern void
 SECITEM_ZfreeItem_stub(SECItem *zap, PRBool freeit)
 {
     STUB_SAFE_CALL2(SECITEM_ZfreeItem_Util, zap, freeit);
+    abort();
+}
+
+extern int
+NSS_SecureMemcmp_stub(const void *a, const void *b, size_t n)
+{
+    STUB_SAFE_CALL3(NSS_SecureMemcmp, a, b, n);
     abort();
 }
 
@@ -492,6 +561,7 @@ freebl_InitNSPR(void *lib)
 {
     STUB_FETCH_FUNCTION(PR_Free);
     STUB_FETCH_FUNCTION(PR_Open);
+    STUB_FETCH_FUNCTION(PR_ImportPipe);
     STUB_FETCH_FUNCTION(PR_Close);
     STUB_FETCH_FUNCTION(PR_Read);
     STUB_FETCH_FUNCTION(PR_Seek);
@@ -499,10 +569,16 @@ freebl_InitNSPR(void *lib)
     STUB_FETCH_FUNCTION(PR_Assert);
     STUB_FETCH_FUNCTION(PR_Sleep);
     STUB_FETCH_FUNCTION(PR_CallOnce);
+    STUB_FETCH_FUNCTION(PR_NewCondVar);
+    STUB_FETCH_FUNCTION(PR_NotifyCondVar);
+    STUB_FETCH_FUNCTION(PR_NotifyAllCondVar);
+    STUB_FETCH_FUNCTION(PR_WaitCondVar);
+    STUB_FETCH_FUNCTION(PR_DestroyCondVar);
     STUB_FETCH_FUNCTION(PR_NewLock);
     STUB_FETCH_FUNCTION(PR_Unlock);
     STUB_FETCH_FUNCTION(PR_Lock);
     STUB_FETCH_FUNCTION(PR_DestroyLock);
+    STUB_FETCH_FUNCTION(PR_GetEnvSecure);
     return SECSuccess;
 }
 
@@ -514,6 +590,7 @@ freebl_InitNSSUtil(void *lib)
     STUB_FETCH_FUNCTION(PORT_ZAlloc_Util);
     STUB_FETCH_FUNCTION(PORT_ZFree_Util);
     STUB_FETCH_FUNCTION(PORT_NewArena_Util);
+    STUB_FETCH_FUNCTION(PORT_ArenaAlloc_Util);
     STUB_FETCH_FUNCTION(PORT_ArenaZAlloc_Util);
     STUB_FETCH_FUNCTION(PORT_FreeArena_Util);
     STUB_FETCH_FUNCTION(PORT_GetError_Util);
@@ -523,6 +600,8 @@ freebl_InitNSSUtil(void *lib)
     STUB_FETCH_FUNCTION(SECITEM_CompareItem_Util);
     STUB_FETCH_FUNCTION(SECITEM_CopyItem_Util);
     STUB_FETCH_FUNCTION(SECITEM_ZfreeItem_Util);
+    STUB_FETCH_FUNCTION(SECOID_FindOIDTag_Util);
+    STUB_FETCH_FUNCTION(NSS_SecureMemcmp);
     return SECSuccess;
 }
 

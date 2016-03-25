@@ -1,39 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Netscape security libraries.
- *
- * The Initial Developer of the Original Code is
- * Netscape Communications Corporation.
- * Portions created by the Initial Developer are Copyright (C) 1994-2000
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Dr Vipul Gupta <vipul.gupta@sun.com>, Sun Microsystems Laboratories
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 /*
  * Internal PKCS #11 functions. Should only be called by pkcs11.c
  */
@@ -57,7 +24,7 @@
  */
 static SFTKAttribute *
 sftk_NewAttribute(SFTKObject *object,
-	CK_ATTRIBUTE_TYPE type, CK_VOID_PTR value, CK_ULONG len)
+	CK_ATTRIBUTE_TYPE type, const void *value, CK_ULONG len)
 {
     SFTKAttribute *attribute;
 
@@ -529,7 +496,7 @@ sftk_nullAttribute(SFTKObject *object,CK_ATTRIBUTE_TYPE type)
 
 static CK_RV
 sftk_forceTokenAttribute(SFTKObject *object,CK_ATTRIBUTE_TYPE type, 
-						void *value, unsigned int len)
+				const void *value, unsigned int len)
 {
     CK_ATTRIBUTE attribute;
     SFTKDBHandle *dbHandle = NULL;
@@ -544,7 +511,7 @@ sftk_forceTokenAttribute(SFTKObject *object,CK_ATTRIBUTE_TYPE type,
     dbHandle = sftk_getDBForTokenObject(object->slot, object->handle);
 
     attribute.type = type;
-    attribute.pValue = value;
+    attribute.pValue = (void *)value;
     attribute.ulValueLen = len;
 
     crv = sftkdb_SetAttributeValue(dbHandle, object, &attribute, 1);
@@ -556,8 +523,8 @@ sftk_forceTokenAttribute(SFTKObject *object,CK_ATTRIBUTE_TYPE type,
  * force an attribute to a specifc value.
  */
 CK_RV
-sftk_forceAttribute(SFTKObject *object,CK_ATTRIBUTE_TYPE type, void *value,
-						unsigned int len)
+sftk_forceAttribute(SFTKObject *object,CK_ATTRIBUTE_TYPE type, 
+				const void *value, unsigned int len)
 {
     SFTKAttribute *attribute;
     void *att_val = NULL;
@@ -816,8 +783,8 @@ sftk_DeleteAttributeType(SFTKObject *object,CK_ATTRIBUTE_TYPE type)
 }
 
 CK_RV
-sftk_AddAttributeType(SFTKObject *object,CK_ATTRIBUTE_TYPE type,void *valPtr,
-							CK_ULONG length)
+sftk_AddAttributeType(SFTKObject *object,CK_ATTRIBUTE_TYPE type,
+				const void *valPtr, CK_ULONG length)
 {
     SFTKAttribute *attribute;
     attribute = sftk_NewAttribute(object,type,valPtr,length);
@@ -1207,7 +1174,6 @@ sftk_DeleteObject(SFTKSession *session, SFTKObject *object)
 {
     SFTKSlot *slot = sftk_SlotFromSession(session);
     SFTKSessionObject *so = sftk_narrowToSessionObject(object);
-    SFTKTokenObject *to = sftk_narrowToTokenObject(object);
     CK_RV crv = CKR_OK;
     PRUint32 index = sftk_hash(object->handle, slot->sessObjHashSize);
 
@@ -1224,8 +1190,10 @@ sftk_DeleteObject(SFTKSession *session, SFTKObject *object)
 	sftk_FreeObject(object); /* free the reference owned by the queue */
     } else {
 	SFTKDBHandle *handle = sftk_getDBForTokenObject(slot, object->handle);
-
+#ifdef DEBUG
+        SFTKTokenObject *to = sftk_narrowToTokenObject(object);
 	PORT_Assert(to);
+#endif
 	crv = sftkdb_DestroyObject(handle, object->handle);
 	sftk_freeDB(handle);
     } 
@@ -1279,7 +1247,7 @@ static const CK_ATTRIBUTE_TYPE dhPubKeyAttrs[] = {
 };
 static const CK_ULONG dhPubKeyAttrsCount = 
 			sizeof(dhPubKeyAttrs)/sizeof(dhPubKeyAttrs[0]);
-#ifdef NSS_ENABLE_ECC
+#ifndef NSS_DISABLE_ECC
 static const CK_ATTRIBUTE_TYPE ecPubKeyAttrs[] = {
     CKA_EC_PARAMS, CKA_EC_POINT
 };
@@ -1312,7 +1280,7 @@ static const CK_ATTRIBUTE_TYPE dhPrivKeyAttrs[] = {
 };
 static const CK_ULONG dhPrivKeyAttrsCount = 
 			sizeof(dhPrivKeyAttrs)/sizeof(dhPrivKeyAttrs[0]);
-#ifdef NSS_ENABLE_ECC
+#ifndef NSS_DISABLE_ECC
 static const CK_ATTRIBUTE_TYPE ecPrivKeyAttrs[] = {
     CKA_EC_PARAMS, CKA_VALUE
 };
@@ -1423,7 +1391,7 @@ stfk_CopyTokenPrivateKey(SFTKObject *destObject,SFTKTokenObject *src_to)
 	crv = stfk_CopyTokenAttributes(destObject, src_to, dhPrivKeyAttrs,
 							dhPrivKeyAttrsCount);
 	break;
-#ifdef NSS_ENABLE_ECC
+#ifndef NSS_DISABLE_ECC
     case CKK_EC:
 	crv = stfk_CopyTokenAttributes(destObject, src_to, ecPrivKeyAttrs,
 							ecPrivKeyAttrsCount);
@@ -1485,7 +1453,7 @@ stfk_CopyTokenPublicKey(SFTKObject *destObject,SFTKTokenObject *src_to)
 	crv = stfk_CopyTokenAttributes(destObject, src_to, dhPubKeyAttrs,
 							dhPubKeyAttrsCount);
 	break;
-#ifdef NSS_ENABLE_ECC
+#ifndef NSS_DISABLE_ECC
     case CKK_EC:
 	crv = stfk_CopyTokenAttributes(destObject, src_to, ecPubKeyAttrs,
 							ecPubKeyAttrsCount);
@@ -1932,7 +1900,6 @@ SFTKObject *
 sftk_NewTokenObject(SFTKSlot *slot, SECItem *dbKey, CK_OBJECT_HANDLE handle)
 {
     SFTKObject *object = NULL;
-    SFTKTokenObject *tokObject = NULL;
     PRBool hasLocks = PR_FALSE;
     CK_RV crv;
 
@@ -1941,7 +1908,6 @@ sftk_NewTokenObject(SFTKSlot *slot, SECItem *dbKey, CK_OBJECT_HANDLE handle)
     if (object == NULL) {
 	return NULL;
     }
-    tokObject = (SFTKTokenObject *) object;
 
     object->handle = handle;
     /* every object must have a class, if we can't get it, the object

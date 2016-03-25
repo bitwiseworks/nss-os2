@@ -1,41 +1,9 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the Netscape security libraries.
- *
- * The Initial Developer of the Original Code is
- * Red Hat, Inc
- * Portions created by the Initial Developer are Copyright (C) 2005
- * the Initial Developer. All Rights Reserved.
- *
- * Contributor(s):
- *   Robert Relyea <rrelyea@redhat.com>
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "mpi.h"
+#include "prtypes.h"
 
 /*
  * This file implements a single function: s_mpi_getProcessorLineSize();
@@ -107,13 +75,13 @@ void freebl_cpuid(unsigned long op, unsigned long *eax,
                          unsigned long *edx)
 {
 /* sigh GCC isn't smart enough to save the ebx PIC register on it's own
- * in this case, so do it by hand. */
-	__asm__("pushl %%ebx\n\t"
+ * in this case, so do it by hand. Use edi to store ebx and pass the
+ * value returned in ebx from cpuid through edi. */
+	__asm__("mov %%ebx,%%edi\n\t"
 		  "cpuid\n\t"
-		  "mov %%ebx,%1\n\t"
-		  "popl %%ebx\n\t"
+		  "xchgl %%ebx,%%edi\n\t"
 		: "=a" (*eax),
-		  "=r" (*ebx),
+		  "=D" (*ebx),
 		  "=c" (*ecx),
 		  "=d" (*edx)
 		: "0" (op));
@@ -652,29 +620,15 @@ unsigned long
 s_mpi_is_sse2()
 {
     unsigned long eax, ebx, ecx, edx;
-    int manufacturer = MAN_UNKNOWN;
-    int i;
-    char string[13];
 
     if (is386() || is486()) {
 	return 0;
     }
     freebl_cpuid(0, &eax, &ebx, &ecx, &edx);
-    *(int *)string = ebx;
-    *(int *)&string[4] = edx;
-    *(int *)&string[8] = ecx;
-    string[12] = 0;
 
     /* has no SSE2 extensions */
     if (eax == 0) {
 	return 0;
-    }
-
-    for (i=0; i < n_manufacturers; i++) {
-	if ( strcmp(manMap[i],string) == 0) {
-	    manufacturer = i;
-	    break;
-	}
     }
 
     freebl_cpuid(1,&eax,&ebx,&ecx,&edx);
@@ -686,11 +640,12 @@ unsigned long
 s_mpi_getProcessorLineSize()
 {
     unsigned long eax, ebx, ecx, edx;
+    PRUint32 cpuid[3];
     unsigned long cpuidLevel;
     unsigned long cacheLineSize = 0;
     int manufacturer = MAN_UNKNOWN;
     int i;
-    char string[65];
+    char string[13];
 
 #if !defined(AMD_64)
     if (is386()) {
@@ -703,9 +658,14 @@ s_mpi_getProcessorLineSize()
     /* Pentium, cpuid command is available */
     freebl_cpuid(0, &eax, &ebx, &ecx, &edx);
     cpuidLevel = eax;
-    *(int *)string = ebx;
-    *(int *)&string[4] = edx;
-    *(int *)&string[8] = ecx;
+    /* string holds the CPU's manufacturer ID string - a twelve
+     * character ASCII string stored in ebx, edx, ecx, and
+     * the 32-bit extended feature flags are in edx, ecx.
+     */
+    cpuid[0] = ebx;
+    cpuid[1] = ecx;
+    cpuid[2] = edx;
+    memcpy(string, cpuid, sizeof(cpuid));
     string[12] = 0;
 
     manufacturer = MAN_UNKNOWN;

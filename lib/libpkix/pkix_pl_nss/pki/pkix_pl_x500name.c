@@ -1,39 +1,6 @@
-/* ***** BEGIN LICENSE BLOCK *****
- * Version: MPL 1.1/GPL 2.0/LGPL 2.1
- *
- * The contents of this file are subject to the Mozilla Public License Version
- * 1.1 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * http://www.mozilla.org/MPL/
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
- * for the specific language governing rights and limitations under the
- * License.
- *
- * The Original Code is the PKIX-C library.
- *
- * The Initial Developer of the Original Code is
- * Sun Microsystems, Inc.
- * Portions created by the Initial Developer are
- * Copyright 2004-2007 Sun Microsystems, Inc.  All Rights Reserved.
- *
- * Contributor(s):
- *   Sun Microsystems, Inc.
- *
- * Alternatively, the contents of this file may be used under the terms of
- * either the GNU General Public License Version 2 or later (the "GPL"), or
- * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
- * in which case the provisions of the GPL or the LGPL are applicable instead
- * of those above. If you wish to allow use of your version of this file only
- * under the terms of either the GPL or the LGPL, and not to allow others to
- * use your version of this file under the terms of the MPL, indicate your
- * decision by deleting the provisions above and replace them with the notice
- * and other provisions required by the GPL or the LGPL. If you do not delete
- * the provisions above, a recipient may use your version of this file under
- * the terms of any one of the MPL, the GPL or the LGPL.
- *
- * ***** END LICENSE BLOCK ***** */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 /*
  * pkix_pl_x500name.c
  *
@@ -44,61 +11,6 @@
 #include "pkix_pl_x500name.h"
 
 /* --Private-X500Name-Functions------------------------------------- */
-
-/*
- * FUNCTION: pkix_pl_X500Name_ToString_Helper
- * DESCRIPTION:
- *
- *  Helper function that creates a string representation of the X500Name
- *  pointed to by "name" and stores it at "pString".
- *
- * PARAMETERS
- *  "name"
- *      Address of X500Name whose string representation is desired.
- *      Must be non-NULL.
- *  "pString"
- *      Address where object pointer will be stored. Must be non-NULL.
- *  "plContext" - Platform-specific context pointer.
- * THREAD SAFETY:
- *  Thread Safe (see Thread Safety Definitions in Programmer's Guide)
- * RETURNS:
- *  Returns NULL if the function succeeds.
- *  Returns a X500Name Error if the function fails in a non-fatal way.
- *  Returns a Fatal Error if the function fails in an unrecoverable way.
- */
-static PKIX_Error *
-pkix_pl_X500Name_ToString_Helper(
-        PKIX_PL_X500Name *name,
-        PKIX_PL_String **pString,
-        void *plContext)
-{
-        CERTName *nssDN = NULL;
-        char *utf8String = NULL;
-        PKIX_UInt32 utf8Length;
-
-        PKIX_ENTER(X500NAME, "pkix_pl_X500Name_ToString_Helper");
-        PKIX_NULLCHECK_TWO(name, pString);
-        nssDN = &name->nssDN;
-
-        /* this should really be called CERT_NameToUTF8 */
-        utf8String = CERT_NameToAsciiInvertible(nssDN, CERT_N2A_INVERTIBLE);
-        if (!utf8String){
-                PKIX_ERROR(PKIX_CERTNAMETOASCIIFAILED);
-        }
-
-        PKIX_X500NAME_DEBUG("\t\tCalling PL_strlen).\n");
-        utf8Length = PL_strlen(utf8String);
-
-        PKIX_CHECK(PKIX_PL_String_Create
-                    (PKIX_UTF8, utf8String, utf8Length, pString, plContext),
-                    PKIX_STRINGCREATEFAILED);
-
-cleanup:
-
-        PR_Free(utf8String);
-
-        PKIX_RETURN(X500NAME);
-}
 
 /*
  * FUNCTION: pkix_pl_X500Name_Destroy
@@ -325,7 +237,7 @@ pkix_pl_X500Name_CreateFromUtf8(
         void *plContext)
 {
         PKIX_PL_X500Name *x500Name = NULL;
-        PRArenaPool *arena = NULL;
+        PLArenaPool *arena = NULL;
         CERTName *nssDN = NULL;
         SECItem *resultSecItem = NULL;
         
@@ -429,7 +341,7 @@ PKIX_PL_X500Name_CreateFromCERTName(
         PKIX_PL_X500Name **pName,
         void *plContext)
 {
-        PRArenaPool *arena = NULL;
+        PLArenaPool *arena = NULL;
         SECStatus rv = SECFailure;
         PKIX_PL_X500Name *x500Name = NULL;
 
@@ -590,7 +502,7 @@ cleanup:
  *      Address of X500Name whose CERTName flag is to be encoded. Must be
  *      non-NULL.
  *  "arena"
- *      Address of the PRArenaPool to be used in the encoding, and in which
+ *      Address of the PLArenaPool to be used in the encoding, and in which
  *      "pSECName" will be allocated. Must be non-NULL.
  *  "pSECName"
  *      Address where result will be stored. Must be non-NULL.
@@ -607,7 +519,7 @@ cleanup:
 PKIX_Error *
 pkix_pl_X500Name_GetDERName(
         PKIX_PL_X500Name *xname,
-        PRArenaPool *arena,
+        PLArenaPool *arena,
         SECItem **pDERName,
         void *plContext)
 {
