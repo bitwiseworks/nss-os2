@@ -13,7 +13,7 @@ XP_DEFINE  += -DXP_PC=1  -DXP_OS2=1
 LIB_PREFIX  = $(NULL)
 
 # Override suffix in suffix.mk
-LIB_SUFFIX  = lib
+LIB_SUFFIX  = a
 # the DLL_SUFFIX must be uppercase for FIPS mode to work. bugzilla 240784
 DLL_SUFFIX  = dll
 PROG_SUFFIX = .exe
@@ -21,7 +21,7 @@ PROG_SUFFIX = .exe
 
 CCC			= gcc
 LINK			= gcc
-AR                      = emxomfar r $@
+AR                      = ar r $@
 # Keep AR_FLAGS blank so that we do not have to change rules.mk
 AR_FLAGS                = 
 RANLIB 			= @echo OS2 RANLIB
@@ -63,7 +63,7 @@ PROCESS_MAP_FILE = \
 
 endif   #NO_SHARED_LIB
 
-OS_CFLAGS          = -Wall -Wno-unused -Wpointer-arith -Wcast-align -Wno-switch -Zomf
+OS_CFLAGS          = -Wall -Wno-unused -Wpointer-arith -Wcast-align -Wno-switch
 
 ifdef BUILD_OPT
 ifeq (11,$(ALLOW_OPT_CODE_SIZE)$(OPT_CODE_SIZE))
@@ -147,7 +147,7 @@ endif
 
 
 ifdef LIBRARY_NAME
-    IMPORT_LIBRARY = $(OBJDIR)/$(LIBRARY_NAME)$(LIBRARY_VERSION)$(JDK_DEBUG_SUFFIX).lib
+    IMPORT_LIBRARY = $(OBJDIR)/$(LIBRARY_NAME)$(LIBRARY_VERSION)$(JDK_DEBUG_SUFFIX).$(LIB_SUFFIX)
 endif
 
 
