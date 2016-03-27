@@ -15,7 +15,7 @@ LIB_PREFIX  = $(NULL)
 # Override suffix in suffix.mk
 LIB_SUFFIX  = lib
 # the DLL_SUFFIX must be uppercase for FIPS mode to work. bugzilla 240784
-DLL_SUFFIX  = DLL
+DLL_SUFFIX  = dll
 PROG_SUFFIX = .exe
 
 
@@ -86,17 +86,13 @@ DSO_LDOPTS      += -s
 LDFLAGS         += -s
 endif
 
-# OS/2 use nsinstall that is included in the toolkit.
-# since we do not wish to support and maintain 3 version of nsinstall in mozilla, nspr and nss
-
 ifdef BUILD_TREE
 NSINSTALL_DIR  = $(BUILD_TREE)/nss
+NSINSTALL      = $(BUILD_TREE)/nss/nsinstall.exe
 else
 NSINSTALL_DIR  = $(CORE_DEPTH)/coreconf/nsinstall
+NSINSTALL      = $(NSINSTALL_DIR)/$(OBJDIR_NAME)/nsinstall.exe
 endif
-# NSINSTALL      = $(NSINSTALL_DIR)/$(OBJDIR_NAME)/nsinstall
-NSINSTALL 	= nsinstall             # HCT4OS2
-INSTALL		= $(NSINSTALL)
 
 MKDEPEND_DIR    = $(CORE_DEPTH)/coreconf/mkdepend
 MKDEPEND        = $(MKDEPEND_DIR)/$(OBJDIR_NAME)/mkdepend
