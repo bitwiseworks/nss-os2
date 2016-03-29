@@ -80,12 +80,7 @@ include ../platrules.mk
 
 SRCDIR = $(call core_abspath,.)
 
-%.chk: %.$(DLL_SUFFIX) 
-ifeq ($(OS_TARGET), OS2)
-	cd $(OBJDIR) ; cmd.exe /c $(SRCDIR)/sign.cmd $(DIST) \
-	$(call core_abspath,$(OBJDIR)) $(OS_TARGET) \
-	$(call core_abspath,$(NSPR_LIB_DIR)) $(call core_abspath,$<)
-else
+%.chk: %.$(DLL_SUFFIX)
     ifeq ($(CROSS_COMPILE),1)
 	# do nothing
     else
@@ -93,7 +88,6 @@ else
 	$(call core_abspath,$(OBJDIR)) $(OS_TARGET) \
 	$(call core_abspath,$(NSPR_LIB_DIR)) $(call core_abspath,$<)
     endif
-endif
 
 libs install :: $(CHECKLOC)
 

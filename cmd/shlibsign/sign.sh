@@ -32,6 +32,13 @@ WIN*)
     echo "${2}"/shlibsign -v -i "${5}"
     "${2}"/shlibsign -v -i "${5}"
     ;;
+OS2*)
+    BEGINLIBPATH=`(cd "${1}"/lib; pwd)`\;`(cd "${4}"; pwd)`\;$BEGINLIBPATH
+    export BEGINLIBPATH=`echo $BEGINLIBPATH | sed -e 's|/@unixroot|'$UNIXROOT'|g'`
+    export LIBPATHSTRICT=T
+    echo "${2}"/shlibsign.exe -v -i "${5}"
+    "${2}"/shlibsign.exe -v -i "${5}"
+    ;;
 *)
     LIBPATH=`(cd "${1}"/lib; pwd)`:`(cd "${4}"; pwd)`:$LIBPATH
     export LIBPATH
