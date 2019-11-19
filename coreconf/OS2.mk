@@ -3,6 +3,12 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+VENDOR?=community
+LIBRARY_VMINOR=`grep NSS_VMINOR $(CORE_DEPTH)/lib/nss/nss.h | cut -d" " -f3`
+LIBRARY_VPATCH=`grep NSS_VPATCH $(CORE_DEPTH)/lib/nss/nss.h | cut -d" " -f3`
+BUILD_INFO=\#\#1\#\# $(shell date +'%d %b %Y %H:%M:%S')     $(shell uname -n)
+BUILDLEVEL_INFO=@\#$(VENDOR):$(LIBRARY_VERSION).$(LIBRARY_VMINOR).$(LIBRARY_VPATCH)\#@$(BUILD_INFO)::::$(LIBRARY_VPATCH)::
+
 MOZ_WIDGET_TOOLKIT = os2
 
 # XP_PC is for Window and OS2 on Intel X86
@@ -51,6 +57,7 @@ MKSHLIB += $(MAPFILE)
 endif
 PROCESS_MAP_FILE = \
 	echo LIBRARY $(LIBRARY_NAME)$(LIBRARY_VERSION) INITINSTANCE TERMINSTANCE > $@; \
+	echo "DESCRIPTION \"$(BUILDLEVEL_INFO)@@$(LIBRARY_NAME)\"" >> $@; \
 	echo PROTMODE >> $@; \
 	echo CODE    LOADONCALL MOVEABLE DISCARDABLE >> $@; \
 	echo DATA    PRELOAD MOVEABLE MULTIPLE NONSHARED >> $@; \
