@@ -35,6 +35,7 @@ typedef struct CERTCertListStr CERTCertList;
 typedef struct CERTCertListNodeStr CERTCertListNode;
 typedef struct CERTCertNicknamesStr CERTCertNicknames;
 typedef struct CERTCertTrustStr CERTCertTrust;
+typedef struct CERTCertDistrustStr CERTCertDistrust;
 typedef struct CERTCertificateStr CERTCertificate;
 typedef struct CERTCertificateListStr CERTCertificateList;
 typedef struct CERTCertificateRequestStr CERTCertificateRequest;
@@ -141,6 +142,18 @@ struct CERTCertTrustStr {
 };
 
 /*
+ * Distrust dates for specific certificate usages.
+ * These dates are hardcoded in nssckbi/builtins. They are DER encoded to be
+ * compatible with the format of certdata.txt, other date fields in certs and
+ * existing functions to read these dates. Clients should check the distrust
+ * date in certificates to avoid trusting a CA for service they have ceased to
+ * support */
+struct CERTCertDistrustStr {
+    SECItem serverDistrustAfter;
+    SECItem emailDistrustAfter;
+};
+
+/*
  * defined the types of trust that exist
  */
 typedef enum SECTrustTypeEnum {
@@ -150,12 +163,12 @@ typedef enum SECTrustTypeEnum {
     trustTypeNone = 3
 } SECTrustType;
 
-#define SEC_GET_TRUST_FLAGS(trust, type)                                       \
-    (((type) == trustSSL)                                                      \
-         ? ((trust)->sslFlags)                                                 \
-         : (((type) == trustEmail) ? ((trust)->emailFlags)                     \
-                                   : (((type) == trustObjectSigning)           \
-                                          ? ((trust)->objectSigningFlags)      \
+#define SEC_GET_TRUST_FLAGS(trust, type)                                  \
+    (((type) == trustSSL)                                                 \
+         ? ((trust)->sslFlags)                                            \
+         : (((type) == trustEmail) ? ((trust)->emailFlags)                \
+                                   : (((type) == trustObjectSigning)      \
+                                          ? ((trust)->objectSigningFlags) \
                                           : 0)))
 
 /*
@@ -279,6 +292,8 @@ struct CERTCertificateStr {
     PK11SlotInfo *slot;        /*if this cert came of a token, which is it*/
     CK_OBJECT_HANDLE pkcs11ID; /*and which object on that token is it */
     PRBool ownSlot;            /*true if the cert owns the slot reference */
+    /* These fields are used in nssckbi/builtins CAs. */
+    CERTCertDistrust *distrust;
 };
 #define SEC_CERTIFICATE_VERSION_1 0 /* default created */
 #define SEC_CERTIFICATE_VERSION_2 1 /* v2 */
@@ -416,6 +431,19 @@ struct CERTDistNamesStr {
     void *head; /* private */
 };
 
+/*
+ * NS_CERT_TYPE defines are used in two areas:
+ * 1) The old NSS Cert Type Extension, which is a certificate extension in the
+ * actual cert. It was created before the x509 Extended Key Usage Extension,
+ * which has now taken over it's function. This field is only 8 bits wide
+ * 2) The nsCertType entry in the CERTCertificate structure. This field is
+ * 32 bits wide.
+ * Any entries in this table greater than 0x80 will not be able to be encoded
+ * in an NSS Cert Type Extension, but can still be represented internally in
+ * the nsCertType field.
+ */
+#define NS_CERT_TYPE_IPSEC_CA (0x200)         /* outside the NS Cert Type Extenstion */
+#define NS_CERT_TYPE_IPSEC (0x100)            /* outside the NS Cert Type Extenstion */
 #define NS_CERT_TYPE_SSL_CLIENT (0x80)        /* bit 0 */
 #define NS_CERT_TYPE_SSL_SERVER (0x40)        /* bit 1 */
 #define NS_CERT_TYPE_EMAIL (0x20)             /* bit 2 */
@@ -428,13 +456,14 @@ struct CERTDistNamesStr {
 #define EXT_KEY_USAGE_TIME_STAMP (0x8000)
 #define EXT_KEY_USAGE_STATUS_RESPONDER (0x4000)
 
-#define NS_CERT_TYPE_APP                                                       \
-    (NS_CERT_TYPE_SSL_CLIENT | NS_CERT_TYPE_SSL_SERVER | NS_CERT_TYPE_EMAIL |  \
-     NS_CERT_TYPE_OBJECT_SIGNING)
+#define NS_CERT_TYPE_APP                                                      \
+    (NS_CERT_TYPE_SSL_CLIENT | NS_CERT_TYPE_SSL_SERVER | NS_CERT_TYPE_EMAIL | \
+     NS_CERT_TYPE_IPSEC | NS_CERT_TYPE_OBJECT_SIGNING)
 
-#define NS_CERT_TYPE_CA                                                        \
-    (NS_CERT_TYPE_SSL_CA | NS_CERT_TYPE_EMAIL_CA |                             \
-     NS_CERT_TYPE_OBJECT_SIGNING_CA | EXT_KEY_USAGE_STATUS_RESPONDER)
+#define NS_CERT_TYPE_CA                                                \
+    (NS_CERT_TYPE_SSL_CA | NS_CERT_TYPE_EMAIL_CA |                     \
+     NS_CERT_TYPE_OBJECT_SIGNING_CA | EXT_KEY_USAGE_STATUS_RESPONDER | \
+     NS_CERT_TYPE_IPSEC_CA)
 typedef enum SECCertUsageEnum {
     certUsageSSLClient = 0,
     certUsageSSLServer = 1,
@@ -447,7 +476,8 @@ typedef enum SECCertUsageEnum {
     certUsageVerifyCA = 8,
     certUsageProtectedObjectSigner = 9,
     certUsageStatusResponder = 10,
-    certUsageAnyCA = 11
+    certUsageAnyCA = 11,
+    certUsageIPsec = 12
 } SECCertUsage;
 
 typedef PRInt64 SECCertificateUsage;
@@ -465,8 +495,9 @@ typedef PRInt64 SECCertificateUsage;
 #define certificateUsageProtectedObjectSigner (0x0200)
 #define certificateUsageStatusResponder (0x0400)
 #define certificateUsageAnyCA (0x0800)
+#define certificateUsageIPsec (0x1000)
 
-#define certificateUsageHighest certificateUsageAnyCA
+#define certificateUsageHighest certificateUsageIPsec
 
 /*
  * Does the cert belong to the user, a peer, or a CA.
@@ -536,9 +567,9 @@ struct CERTIssuerAndSNStr {
 #define KU_KEY_CERT_SIGN (0x04)     /* bit 5 */
 #define KU_CRL_SIGN (0x02)          /* bit 6 */
 #define KU_ENCIPHER_ONLY (0x01)     /* bit 7 */
-#define KU_ALL                                                                 \
-    (KU_DIGITAL_SIGNATURE | KU_NON_REPUDIATION | KU_KEY_ENCIPHERMENT |         \
-     KU_DATA_ENCIPHERMENT | KU_KEY_AGREEMENT | KU_KEY_CERT_SIGN |              \
+#define KU_ALL                                                         \
+    (KU_DIGITAL_SIGNATURE | KU_NON_REPUDIATION | KU_KEY_ENCIPHERMENT | \
+     KU_DATA_ENCIPHERMENT | KU_KEY_AGREEMENT | KU_KEY_CERT_SIGN |      \
      KU_CRL_SIGN | KU_ENCIPHER_ONLY)
 
 /* This value will not occur in certs.  It is used internally for the case
@@ -733,7 +764,7 @@ struct CERTVerifyLogStr {
 
 struct CERTOKDomainNameStr {
     CERTOKDomainName *next;
-    char name[1]; /* actual length may be longer. */
+    char *name;
 };
 
 typedef SECStatus(PR_CALLBACK *CERTStatusChecker)(CERTCertDBHandle *handle,
@@ -873,36 +904,36 @@ typedef struct {
  */
 
 typedef enum {
-    cert_pi_end = 0,         /* SPECIAL: signifies end of array of
+    cert_pi_end = 0,              /* SPECIAL: signifies end of array of
                               * CERTValParam* */
-    cert_pi_nbioContext = 1, /* specify a non-blocking IO context used to
+    cert_pi_nbioContext = 1,      /* specify a non-blocking IO context used to
                               * resume a session. If this argument is
                               * specified, no other arguments should be.
                               * Specified in value.pointer.p. If the
                               * operation completes the context will be
                               * freed. */
-    cert_pi_nbioAbort = 2,   /* specify a non-blocking IO context for an
+    cert_pi_nbioAbort = 2,        /* specify a non-blocking IO context for an
                               * existing operation which the caller wants
                               * to abort. If this argument is
                               * specified, no other arguments should be.
                               * Specified in value.pointer.p. If the
                               * operation succeeds the context will be
                               * freed. */
-    cert_pi_certList = 3,    /* specify the chain to validate against. If
+    cert_pi_certList = 3,         /* specify the chain to validate against. If
                               * this value is given, then the path
                               * construction step in the validation is
                               * skipped. Specified in value.pointer.chain */
-    cert_pi_policyOID = 4,   /* validate certificate for policy OID.
+    cert_pi_policyOID = 4,        /* validate certificate for policy OID.
                               * Specified in value.array.oids. Cert must
                               * be good for at least one OID in order
                               * to validate. Default is that the user is not
                               * concerned about certificate policy. */
-    cert_pi_policyFlags = 5, /* flags for each policy specified in policyOID.
+    cert_pi_policyFlags = 5,      /* flags for each policy specified in policyOID.
                               * Specified in value.scalar.ul. Policy flags
                               * apply to all specified oids.
                               * Use CERT_POLICY_FLAG_* macros below. If not
                               * specified policy flags default to 0 */
-    cert_pi_keyusage = 6,    /* specify what the keyusages the certificate
+    cert_pi_keyusage = 6,         /* specify what the keyusages the certificate
                               * will be evaluated against, specified in
                               * value.scalar.ui. The cert must validate for
                               * at least one of the specified key usages.
@@ -946,7 +977,7 @@ typedef enum {
      * validation on the currently calculated chain.
      * Value is in value.pointer.chainVerifyCallback */
     cert_pi_useOnlyTrustAnchors = 14,
-        /* If true, disables trusting any
+    /* If true, disables trusting any
         * certificates other than the ones passed in via cert_pi_trustAnchors.
         * If false, then the certificates specified via cert_pi_trustAnchors
         * will be combined with the pre-existing trusted roots, but only
