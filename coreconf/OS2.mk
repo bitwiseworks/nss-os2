@@ -20,8 +20,8 @@ PROG_SUFFIX = .exe
 
 
 CCC			= gcc
-LINK			= gcc
-AR                      = ar r $@
+LD			= gcc
+AR			= ar r $@
 # Keep AR_FLAGS blank so that we do not have to change rules.mk
 AR_FLAGS                = 
 RANLIB 			= @echo OS2 RANLIB
@@ -37,8 +37,6 @@ HIGHMEM_LDFLAG          = -Zhigh-mem
 endif
 
 ifndef NO_SHARED_LIB
-WRAP_MALLOC_LIB         = 
-WRAP_MALLOC_CFLAGS      = 
 DSO_CFLAGS              = 
 DSO_PIC_CFLAGS          = 
 MKSHLIB                 = $(CXX) $(CXXFLAGS) $(DSO_LDOPTS) -o $@

@@ -52,7 +52,7 @@ static uint32 hash3(const void *, size_t);
 static uint32 hash4(const void *, size_t);
 
 /* Global default hash function */
-uint32 (*__default_hash)(const void *, size_t) = hash4;
+uint32 (*dbm_default_hash)(const void *, size_t) = hash4;
 
 /*
  * HASH FUNCTIONS
@@ -179,25 +179,25 @@ hash4(const void *keyarg, register size_t len)
             case 0:
                 do {
                     HASH4;
-                        /* FALLTHROUGH */
+                    /* FALLTHROUGH */
                     case 7:
                         HASH4;
-                        /* FALLTHROUGH */
+                    /* FALLTHROUGH */
                     case 6:
                         HASH4;
-                        /* FALLTHROUGH */
+                    /* FALLTHROUGH */
                     case 5:
                         HASH4;
-                        /* FALLTHROUGH */
+                    /* FALLTHROUGH */
                     case 4:
                         HASH4;
-                        /* FALLTHROUGH */
+                    /* FALLTHROUGH */
                     case 3:
                         HASH4;
-                        /* FALLTHROUGH */
+                    /* FALLTHROUGH */
                     case 2:
                         HASH4;
-                        /* FALLTHROUGH */
+                    /* FALLTHROUGH */
                     case 1:
                         HASH4;
                 } while (--loop);

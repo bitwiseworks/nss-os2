@@ -12,16 +12,20 @@
 #include "certdb.h"
 #include "certi.h"
 #include "cryptohi.h"
+
+#ifndef NSS_DISABLE_LIBPKIX
 #include "pkix.h"
-/*#include "pkix_sample_modules.h" */
 #include "pkix_pl_cert.h"
+#else
+#include "nss.h"
+#endif /* NSS_DISABLE_LIBPKIX */
 
 #include "nsspki.h"
 #include "pkitm.h"
 #include "pkim.h"
 #include "pki3hack.h"
 #include "base.h"
-#include "keyhi.h"
+#include "keyi.h"
 
 /*
  * Check the validity times of a certificate
@@ -33,7 +37,7 @@ CERT_CertTimesValid(CERTCertificate *c)
     return (valid == secCertTimeValid) ? SECSuccess : SECFailure;
 }
 
-SECStatus
+static SECStatus
 checkKeyParams(const SECAlgorithmID *sigAlgorithm, const SECKEYPublicKey *key)
 {
     SECStatus rv;
@@ -69,12 +73,38 @@ checkKeyParams(const SECAlgorithmID *sigAlgorithm, const SECKEYPublicKey *key)
                 return SECFailure;
             }
             return SECSuccess;
+
+        case SEC_OID_PKCS1_RSA_PSS_SIGNATURE: {
+            PORTCheapArenaPool tmpArena;
+            SECOidTag hashAlg;
+            SECOidTag maskHashAlg;
+
+            PORT_InitCheapArena(&tmpArena, DER_DEFAULT_CHUNKSIZE);
+            rv = sec_DecodeRSAPSSParams(&tmpArena.arena,
+                                        &sigAlgorithm->parameters,
+                                        &hashAlg, &maskHashAlg, NULL);
+            PORT_DestroyCheapArena(&tmpArena);
+            if (rv != SECSuccess) {
+                return SECFailure;
+            }
+
+            if (NSS_GetAlgorithmPolicy(hashAlg, &policyFlags) == SECSuccess &&
+                !(policyFlags & NSS_USE_ALG_IN_CERT_SIGNATURE)) {
+                PORT_SetError(SEC_ERROR_CERT_SIGNATURE_ALGORITHM_DISABLED);
+                return SECFailure;
+            }
+            if (NSS_GetAlgorithmPolicy(maskHashAlg, &policyFlags) == SECSuccess &&
+                !(policyFlags & NSS_USE_ALG_IN_CERT_SIGNATURE)) {
+                PORT_SetError(SEC_ERROR_CERT_SIGNATURE_ALGORITHM_DISABLED);
+                return SECFailure;
+            }
+        }
+        /* fall through to RSA key checking */
         case SEC_OID_PKCS1_MD5_WITH_RSA_ENCRYPTION:
         case SEC_OID_PKCS1_SHA1_WITH_RSA_ENCRYPTION:
         case SEC_OID_PKCS1_SHA256_WITH_RSA_ENCRYPTION:
         case SEC_OID_PKCS1_SHA384_WITH_RSA_ENCRYPTION:
         case SEC_OID_PKCS1_SHA512_WITH_RSA_ENCRYPTION:
-        case SEC_OID_PKCS1_RSA_PSS_SIGNATURE:
         case SEC_OID_ISO_SHA_WITH_RSA_SIGNATURE:
         case SEC_OID_ISO_SHA1_WITH_RSA_SIGNATURE:
             if (key->keyType != rsaKey && key->keyType != rsaPssKey) {
@@ -132,36 +162,62 @@ CERT_VerifySignedDataWithPublicKey(const CERTSignedData *sd,
 {
     SECStatus rv;
     SECItem sig;
-    SECOidTag hashAlg = SEC_OID_UNKNOWN;
+    SECOidTag sigAlg;
+    SECOidTag encAlg;
+    SECOidTag hashAlg;
+    PRUint32 policyFlags;
 
     if (!pubKey || !sd) {
         PORT_SetError(PR_INVALID_ARGUMENT_ERROR);
         return SECFailure;
     }
+
+    /* Can we use this algorithm for signature verification?  */
+    sigAlg = SECOID_GetAlgorithmTag(&sd->signatureAlgorithm);
+    rv = sec_DecodeSigAlg(pubKey, sigAlg,
+                          &sd->signatureAlgorithm.parameters,
+                          &encAlg, &hashAlg);
+    if (rv != SECSuccess) {
+        return SECFailure; /* error is set */
+    }
+    rv = NSS_GetAlgorithmPolicy(encAlg, &policyFlags);
+    if (rv == SECSuccess &&
+        !(policyFlags & NSS_USE_ALG_IN_CERT_SIGNATURE)) {
+        PORT_SetError(SEC_ERROR_CERT_SIGNATURE_ALGORITHM_DISABLED);
+        return SECFailure;
+    }
+    rv = NSS_GetAlgorithmPolicy(hashAlg, &policyFlags);
+    if (rv == SECSuccess &&
+        !(policyFlags & NSS_USE_ALG_IN_CERT_SIGNATURE)) {
+        PORT_SetError(SEC_ERROR_CERT_SIGNATURE_ALGORITHM_DISABLED);
+        return SECFailure;
+    }
+    rv = checkKeyParams(&sd->signatureAlgorithm, pubKey);
+    if (rv != SECSuccess) {
+        PORT_SetError(SEC_ERROR_CERT_SIGNATURE_ALGORITHM_DISABLED);
+        return SECFailure;
+    }
+
     /* check the signature */
     sig = sd->signature;
     /* convert sig->len from bit counts to byte count. */
     DER_ConvertBitString(&sig);
 
     rv = VFY_VerifyDataWithAlgorithmID(sd->data.data, sd->data.len, pubKey,
-                                       &sig, &sd->signatureAlgorithm, &hashAlg, wincx);
-    if (rv == SECSuccess) {
-        /* Are we honoring signatures for this algorithm?  */
-        PRUint32 policyFlags = 0;
-        rv = checkKeyParams(&sd->signatureAlgorithm, pubKey);
-        if (rv != SECSuccess) {
-            PORT_SetError(SEC_ERROR_CERT_SIGNATURE_ALGORITHM_DISABLED);
-            return SECFailure;
-        }
-
-        rv = NSS_GetAlgorithmPolicy(hashAlg, &policyFlags);
-        if (rv == SECSuccess &&
-            !(policyFlags & NSS_USE_ALG_IN_CERT_SIGNATURE)) {
-            PORT_SetError(SEC_ERROR_CERT_SIGNATURE_ALGORITHM_DISABLED);
-            return SECFailure;
-        }
+                                       &sig, &sd->signatureAlgorithm,
+                                       &hashAlg, wincx);
+    if (rv != SECSuccess) {
+        return SECFailure; /* error is set */
     }
-    return rv;
+
+    /* for some algorithms, hash algorithm is only known after verification */
+    rv = NSS_GetAlgorithmPolicy(hashAlg, &policyFlags);
+    if (rv == SECSuccess &&
+        !(policyFlags & NSS_USE_ALG_IN_CERT_SIGNATURE)) {
+        PORT_SetError(SEC_ERROR_CERT_SIGNATURE_ALGORITHM_DISABLED);
+        return SECFailure;
+    }
+    return SECSuccess;
 }
 
 /*
@@ -285,6 +341,10 @@ CERT_TrustFlagsForCACertUsage(SECCertUsage usage,
             requiredFlags = CERTDB_TRUSTED_CA;
             trustType = trustSSL;
             break;
+        case certUsageIPsec:
+            requiredFlags = CERTDB_TRUSTED_CA;
+            trustType = trustSSL;
+            break;
         case certUsageSSLServerWithStepUp:
             requiredFlags = CERTDB_TRUSTED_CA | CERTDB_GOVT_APPROVED_CA;
             trustType = trustSSL;
@@ -394,6 +454,142 @@ cert_AddToVerifyLog(CERTVerifyLog *log, CERTCertificate *cert, long error,
                             (void *)(PRWord)arg);              \
     }
 
+/* /C=CN/O=WoSign CA Limited/CN=CA \xE6\xB2\x83\xE9\x80\x9A\xE6\xA0\xB9\xE8\xAF\x81\xE4\xB9\xA6
+ * Using a consistent naming convention, this would actually be called
+ * 'CA沃通根证书DN', but since GCC 6.2.1 apparently can't handle UTF-8
+ * identifiers, this will have to do.
+ */
+static const unsigned char CAWoSignRootDN[72] = {
+    0x30, 0x46, 0x31, 0x0B, 0x30, 0x09, 0x06, 0x03, 0x55, 0x04, 0x06, 0x13, 0x02,
+    0x43, 0x4E, 0x31, 0x1A, 0x30, 0x18, 0x06, 0x03, 0x55, 0x04, 0x0A, 0x13, 0x11,
+    0x57, 0x6F, 0x53, 0x69, 0x67, 0x6E, 0x20, 0x43, 0x41, 0x20, 0x4C, 0x69, 0x6D,
+    0x69, 0x74, 0x65, 0x64, 0x31, 0x1B, 0x30, 0x19, 0x06, 0x03, 0x55, 0x04, 0x03,
+    0x0C, 0x12, 0x43, 0x41, 0x20, 0xE6, 0xB2, 0x83, 0xE9, 0x80, 0x9A, 0xE6, 0xA0,
+    0xB9, 0xE8, 0xAF, 0x81, 0xE4, 0xB9, 0xA6,
+};
+
+/* /C=CN/O=WoSign CA Limited/CN=CA WoSign ECC Root */
+static const unsigned char CAWoSignECCRootDN[72] = {
+    0x30, 0x46, 0x31, 0x0B, 0x30, 0x09, 0x06, 0x03, 0x55, 0x04, 0x06, 0x13, 0x02,
+    0x43, 0x4E, 0x31, 0x1A, 0x30, 0x18, 0x06, 0x03, 0x55, 0x04, 0x0A, 0x13, 0x11,
+    0x57, 0x6F, 0x53, 0x69, 0x67, 0x6E, 0x20, 0x43, 0x41, 0x20, 0x4C, 0x69, 0x6D,
+    0x69, 0x74, 0x65, 0x64, 0x31, 0x1B, 0x30, 0x19, 0x06, 0x03, 0x55, 0x04, 0x03,
+    0x13, 0x12, 0x43, 0x41, 0x20, 0x57, 0x6F, 0x53, 0x69, 0x67, 0x6E, 0x20, 0x45,
+    0x43, 0x43, 0x20, 0x52, 0x6F, 0x6F, 0x74,
+};
+
+/* /C=CN/O=WoSign CA Limited/CN=Certification Authority of WoSign */
+static const unsigned char CertificationAuthorityofWoSignDN[87] = {
+    0x30, 0x55, 0x31, 0x0B, 0x30, 0x09, 0x06, 0x03, 0x55, 0x04, 0x06, 0x13, 0x02,
+    0x43, 0x4E, 0x31, 0x1A, 0x30, 0x18, 0x06, 0x03, 0x55, 0x04, 0x0A, 0x13, 0x11,
+    0x57, 0x6F, 0x53, 0x69, 0x67, 0x6E, 0x20, 0x43, 0x41, 0x20, 0x4C, 0x69, 0x6D,
+    0x69, 0x74, 0x65, 0x64, 0x31, 0x2A, 0x30, 0x28, 0x06, 0x03, 0x55, 0x04, 0x03,
+    0x13, 0x21, 0x43, 0x65, 0x72, 0x74, 0x69, 0x66, 0x69, 0x63, 0x61, 0x74, 0x69,
+    0x6F, 0x6E, 0x20, 0x41, 0x75, 0x74, 0x68, 0x6F, 0x72, 0x69, 0x74, 0x79, 0x20,
+    0x6F, 0x66, 0x20, 0x57, 0x6F, 0x53, 0x69, 0x67, 0x6E,
+};
+
+/* /C=CN/O=WoSign CA Limited/CN=Certification Authority of WoSign G2 */
+static const unsigned char CertificationAuthorityofWoSignG2DN[90] = {
+    0x30, 0x58, 0x31, 0x0B, 0x30, 0x09, 0x06, 0x03, 0x55, 0x04, 0x06, 0x13, 0x02,
+    0x43, 0x4E, 0x31, 0x1A, 0x30, 0x18, 0x06, 0x03, 0x55, 0x04, 0x0A, 0x13, 0x11,
+    0x57, 0x6F, 0x53, 0x69, 0x67, 0x6E, 0x20, 0x43, 0x41, 0x20, 0x4C, 0x69, 0x6D,
+    0x69, 0x74, 0x65, 0x64, 0x31, 0x2D, 0x30, 0x2B, 0x06, 0x03, 0x55, 0x04, 0x03,
+    0x13, 0x24, 0x43, 0x65, 0x72, 0x74, 0x69, 0x66, 0x69, 0x63, 0x61, 0x74, 0x69,
+    0x6F, 0x6E, 0x20, 0x41, 0x75, 0x74, 0x68, 0x6F, 0x72, 0x69, 0x74, 0x79, 0x20,
+    0x6F, 0x66, 0x20, 0x57, 0x6F, 0x53, 0x69, 0x67, 0x6E, 0x20, 0x47, 0x32,
+};
+
+/* /C=IL/O=StartCom Ltd./OU=Secure Digital Certificate Signing/CN=StartCom Certification Authority */
+static const unsigned char StartComCertificationAuthorityDN[127] = {
+    0x30, 0x7D, 0x31, 0x0B, 0x30, 0x09, 0x06, 0x03, 0x55, 0x04, 0x06, 0x13, 0x02,
+    0x49, 0x4C, 0x31, 0x16, 0x30, 0x14, 0x06, 0x03, 0x55, 0x04, 0x0A, 0x13, 0x0D,
+    0x53, 0x74, 0x61, 0x72, 0x74, 0x43, 0x6F, 0x6D, 0x20, 0x4C, 0x74, 0x64, 0x2E,
+    0x31, 0x2B, 0x30, 0x29, 0x06, 0x03, 0x55, 0x04, 0x0B, 0x13, 0x22, 0x53, 0x65,
+    0x63, 0x75, 0x72, 0x65, 0x20, 0x44, 0x69, 0x67, 0x69, 0x74, 0x61, 0x6C, 0x20,
+    0x43, 0x65, 0x72, 0x74, 0x69, 0x66, 0x69, 0x63, 0x61, 0x74, 0x65, 0x20, 0x53,
+    0x69, 0x67, 0x6E, 0x69, 0x6E, 0x67, 0x31, 0x29, 0x30, 0x27, 0x06, 0x03, 0x55,
+    0x04, 0x03, 0x13, 0x20, 0x53, 0x74, 0x61, 0x72, 0x74, 0x43, 0x6F, 0x6D, 0x20,
+    0x43, 0x65, 0x72, 0x74, 0x69, 0x66, 0x69, 0x63, 0x61, 0x74, 0x69, 0x6F, 0x6E,
+    0x20, 0x41, 0x75, 0x74, 0x68, 0x6F, 0x72, 0x69, 0x74, 0x79,
+};
+
+/* /C=IL/O=StartCom Ltd./CN=StartCom Certification Authority G2 */
+static const unsigned char StartComCertificationAuthorityG2DN[85] = {
+    0x30, 0x53, 0x31, 0x0B, 0x30, 0x09, 0x06, 0x03, 0x55, 0x04, 0x06, 0x13, 0x02,
+    0x49, 0x4C, 0x31, 0x16, 0x30, 0x14, 0x06, 0x03, 0x55, 0x04, 0x0A, 0x13, 0x0D,
+    0x53, 0x74, 0x61, 0x72, 0x74, 0x43, 0x6F, 0x6D, 0x20, 0x4C, 0x74, 0x64, 0x2E,
+    0x31, 0x2C, 0x30, 0x2A, 0x06, 0x03, 0x55, 0x04, 0x03, 0x13, 0x23, 0x53, 0x74,
+    0x61, 0x72, 0x74, 0x43, 0x6F, 0x6D, 0x20, 0x43, 0x65, 0x72, 0x74, 0x69, 0x66,
+    0x69, 0x63, 0x61, 0x74, 0x69, 0x6F, 0x6E, 0x20, 0x41, 0x75, 0x74, 0x68, 0x6F,
+    0x72, 0x69, 0x74, 0x79, 0x20, 0x47, 0x32,
+};
+
+struct DataAndLength {
+    const unsigned char *data;
+    PRUint32 len;
+};
+
+static const struct DataAndLength StartComAndWoSignDNs[] = {
+    { CAWoSignRootDN,
+      sizeof(CAWoSignRootDN) },
+    { CAWoSignECCRootDN,
+      sizeof(CAWoSignECCRootDN) },
+    { CertificationAuthorityofWoSignDN,
+      sizeof(CertificationAuthorityofWoSignDN) },
+    { CertificationAuthorityofWoSignG2DN,
+      sizeof(CertificationAuthorityofWoSignG2DN) },
+    { StartComCertificationAuthorityDN,
+      sizeof(StartComCertificationAuthorityDN) },
+    { StartComCertificationAuthorityG2DN,
+      sizeof(StartComCertificationAuthorityG2DN) },
+};
+
+static PRBool
+CertIsStartComOrWoSign(const CERTCertificate *cert)
+{
+    int i;
+    const struct DataAndLength *dn = StartComAndWoSignDNs;
+
+    for (i = 0; i < sizeof(StartComAndWoSignDNs) / sizeof(struct DataAndLength); ++i, dn++) {
+        if (cert->derSubject.len == dn->len &&
+            memcmp(cert->derSubject.data, dn->data, dn->len) == 0) {
+            return PR_TRUE;
+        }
+    }
+    return PR_FALSE;
+}
+
+SECStatus
+isIssuerCertAllowedAtCertIssuanceTime(CERTCertificate *issuerCert,
+                                      CERTCertificate *referenceCert)
+{
+    if (!issuerCert || !referenceCert) {
+        PORT_SetError(SEC_ERROR_INVALID_ARGS);
+        return SECFailure;
+    }
+
+    if (CertIsStartComOrWoSign(issuerCert)) {
+        /* PRTime is microseconds since the epoch, whereas JS time is milliseconds.
+         * (new Date("2016-10-21T00:00:00Z")).getTime() * 1000
+         */
+        static const PRTime OCTOBER_21_2016 = 1477008000000000;
+
+        PRTime notBefore, notAfter;
+        SECStatus rv;
+
+        rv = CERT_GetCertTimes(referenceCert, &notBefore, &notAfter);
+        if (rv != SECSuccess)
+            return rv;
+
+        if (notBefore > OCTOBER_21_2016) {
+            return SECFailure;
+        }
+    }
+
+    return SECSuccess;
+}
+
 static SECStatus
 cert_VerifyCertChainOld(CERTCertDBHandle *handle, CERTCertificate *cert,
                         PRBool checkSig, PRBool *sigerror,
@@ -439,6 +635,7 @@ cert_VerifyCertChainOld(CERTCertDBHandle *handle, CERTCertificate *cert,
     switch (certUsage) {
         case certUsageSSLClient:
         case certUsageSSLServer:
+        case certUsageIPsec:
         case certUsageSSLCA:
         case certUsageSSLServerWithStepUp:
         case certUsageEmailSigner:
@@ -505,7 +702,8 @@ cert_VerifyCertChainOld(CERTCertDBHandle *handle, CERTCertificate *cert,
             CERTGeneralName *subjectNameList;
             int subjectNameListLen;
             int i;
-            PRBool getSubjectCN = (!count && certUsage == certUsageSSLServer);
+            PRBool getSubjectCN = (!count &&
+                                   (certUsage == certUsageSSLServer || certUsage == certUsageIPsec));
             subjectNameList =
                 CERT_GetConstrainedCertificateNames(subjectCert, arena,
                                                     getSubjectCN);
@@ -608,6 +806,13 @@ cert_VerifyCertChainOld(CERTCertDBHandle *handle, CERTCertificate *cert,
         if (rv != SECSuccess || badCert != NULL) {
             PORT_SetError(SEC_ERROR_CERT_NOT_IN_NAME_SPACE);
             LOG_ERROR_OR_EXIT(log, badCert, count + 1, 0);
+            goto loser;
+        }
+
+        rv = isIssuerCertAllowedAtCertIssuanceTime(issuerCert, cert);
+        if (rv != SECSuccess) {
+            PORT_SetError(SEC_ERROR_UNTRUSTED_ISSUER);
+            LOG_ERROR(log, issuerCert, count + 1, 0);
             goto loser;
         }
 
@@ -839,6 +1044,7 @@ CERT_VerifyCACertForUsage(CERTCertDBHandle *handle, CERTCertificate *cert,
     switch (certUsage) {
         case certUsageSSLClient:
         case certUsageSSLServer:
+        case certUsageIPsec:
         case certUsageSSLCA:
         case certUsageSSLServerWithStepUp:
         case certUsageEmailSigner:
@@ -1024,6 +1230,7 @@ cert_CheckLeafTrust(CERTCertificate *cert, SECCertUsage certUsage,
         switch (certUsage) {
             case certUsageSSLClient:
             case certUsageSSLServer:
+            case certUsageIPsec:
                 flags = trust.sslFlags;
 
                 /* is the cert directly trusted or not trusted ? */
@@ -1113,7 +1320,7 @@ cert_CheckLeafTrust(CERTCertificate *cert, SECCertUsage certUsage,
                     *trusted = PR_TRUE;
                     return SECSuccess;
                 }
-                /* fall through to test distrust */
+            /* fall through to test distrust */
             case certUsageAnyCA:
             case certUsageUserCertImport:
                 /* do we distrust these certs explicitly */
@@ -1133,7 +1340,7 @@ cert_CheckLeafTrust(CERTCertificate *cert, SECCertUsage certUsage,
                         return SECFailure;
                     }
                 }
-                /* fall through */
+            /* fall through */
             case certUsageProtectedObjectSigner:
                 flags = trust.objectSigningFlags;
                 if (flags & CERTDB_TERMINAL_RECORD) { /* the trust record is
@@ -1200,7 +1407,8 @@ CERT_VerifyCertificate(CERTCertDBHandle *handle, CERTCertificate *cert,
 
     /* make sure that the cert is valid at time t */
     allowOverride = (PRBool)((requiredUsages & certificateUsageSSLServer) ||
-                             (requiredUsages & certificateUsageSSLServerWithStepUp));
+                             (requiredUsages & certificateUsageSSLServerWithStepUp) ||
+                             (requiredUsages & certificateUsageIPsec));
     validity = CERT_CheckCertValidTimes(cert, t, allowOverride);
     if (validity != secCertTimeValid) {
         valid = SECFailure;
@@ -1229,6 +1437,7 @@ CERT_VerifyCertificate(CERTCertDBHandle *handle, CERTCertificate *cert,
             case certUsageEmailRecipient:
             case certUsageObjectSigner:
             case certUsageStatusResponder:
+            case certUsageIPsec:
                 rv = CERT_KeyUsageAndTypeForCertUsage(certUsage, PR_FALSE,
                                                       &requiredKeyUsage,
                                                       &requiredCertType);
@@ -1361,7 +1570,8 @@ cert_VerifyCertWithFlags(CERTCertDBHandle *handle, CERTCertificate *cert,
 
     /* make sure that the cert is valid at time t */
     allowOverride = (PRBool)((certUsage == certUsageSSLServer) ||
-                             (certUsage == certUsageSSLServerWithStepUp));
+                             (certUsage == certUsageSSLServerWithStepUp) ||
+                             (certUsage == certUsageIPsec));
     validity = CERT_CheckCertValidTimes(cert, t, allowOverride);
     if (validity != secCertTimeValid) {
         LOG_ERROR_OR_EXIT(log, cert, 0, validity);
@@ -1374,6 +1584,7 @@ cert_VerifyCertWithFlags(CERTCertDBHandle *handle, CERTCertificate *cert,
         case certUsageSSLClient:
         case certUsageSSLServer:
         case certUsageSSLServerWithStepUp:
+        case certUsageIPsec:
         case certUsageSSLCA:
         case certUsageEmailSigner:
         case certUsageEmailRecipient:
@@ -1486,6 +1697,7 @@ CERT_VerifyCertNow(CERTCertDBHandle *handle, CERTCertificate *cert,
  *  certUsageSSLClient
  *  certUsageSSLServer
  *  certUsageSSLServerWithStepUp
+ *  certUsageIPsec
  *  certUsageEmailSigner
  *  certUsageEmailRecipient
  *  certUsageObjectSigner

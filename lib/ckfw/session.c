@@ -25,6 +25,7 @@
  *  NSSCKFWSession_CallNotification
  *  NSSCKFWSession_IsRWSession
  *  NSSCKFWSession_IsSO
+ *  NSSCKFWSession_GetFWSlot
  *
  *  -- implement public accessors --
  *  nssCKFWSession_GetMDSession
@@ -32,9 +33,9 @@
  *  nssCKFWSession_CallNotification
  *  nssCKFWSession_IsRWSession
  *  nssCKFWSession_IsSO
+ *  nssCKFWSession_GetFWSlot
  *
  *  -- private accessors --
- *  nssCKFWSession_GetSlot
  *  nssCKFWSession_GetSessionState
  *  nssCKFWSession_SetFWFindObjects
  *  nssCKFWSession_GetFWFindObjects
@@ -870,7 +871,7 @@ nssCKFWSession_InitPIN(
 NSS_IMPLEMENT CK_RV
 nssCKFWSession_SetPIN(
     NSSCKFWSession *fwSession,
-    NSSItem *oldPin,
+    const NSSItem *oldPin,
     NSSItem *newPin)
 {
     CK_RV error = CKR_OK;
@@ -906,7 +907,7 @@ nssCKFWSession_SetPIN(
 
     error = fwSession->mdSession->SetPIN(fwSession->mdSession, fwSession,
                                          fwSession->mdToken, fwSession->fwToken, fwSession->mdInstance,
-                                         fwSession->fwInstance, oldPin, newPin);
+                                         fwSession->fwInstance, (NSSItem *)oldPin, newPin);
 
     return error;
 }
@@ -1418,9 +1419,8 @@ nssCKFWSession_CopyObject(
         /* use create object */
         NSSArena *tmpArena;
         CK_ATTRIBUTE_PTR newTemplate;
-        CK_ULONG i, j, n, newLength, k;
+        CK_ULONG j, n, newLength, k;
         CK_ATTRIBUTE_TYPE_PTR oldTypes;
-        NSSCKFWObject *rv;
 
         n = nssCKFWObject_GetAttributeCount(fwObject, pError);
         if ((0 == n) && (CKR_OK != *pError)) {
@@ -2374,4 +2374,16 @@ NSSCKFWSession_GetCurrentCryptoOperation(
     }
 #endif /* DEBUG */
     return nssCKFWSession_GetCurrentCryptoOperation(fwSession, state);
+}
+
+/*
+ * NSSCKFWSession_GetFWSlot
+ *
+ */
+
+NSS_IMPLEMENT NSSCKFWSlot *
+NSSCKFWSession_GetFWSlot(
+    NSSCKFWSession *fwSession)
+{
+    return nssCKFWSession_GetFWSlot(fwSession);
 }
