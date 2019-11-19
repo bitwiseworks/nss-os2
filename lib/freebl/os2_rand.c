@@ -337,5 +337,19 @@ static void rng_systemJitter(void)
 
 size_t RNG_SystemRNG(void *dest, size_t maxLen)
 {
-    return rng_systemFromNoise(dest,maxLen);
+    size_t retBytes = maxLen;
+    while (maxLen)
+    {
+        size_t nbytes = RNG_GetNoise(dest, maxLen);
+
+        PORT_Assert(nbytes != 0);
+
+        dest += nbytes;
+        maxLen -= nbytes;
+
+        /* some hw op to try to introduce more entropy into the next
+         * RNG_GetNoise call */
+        rng_systemJitter();
+    }
+    return retBytes;
 }
