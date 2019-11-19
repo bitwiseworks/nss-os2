@@ -61,6 +61,6 @@ ifdef NSS_DISABLE_TLS_1_3
 DEFINES += -DNSS_DISABLE_TLS_1_3
 endif
 
-ifeq (,$(filter-out DragonFly FreeBSD Linux NetBSD OpenBSD, $(OS_TARGET)))
+ifeq (,$(filter-out DragonFly FreeBSD Linux NetBSD OpenBSD OS2, $(OS_TARGET)))
 CFLAGS += -std=gnu99
 endif
