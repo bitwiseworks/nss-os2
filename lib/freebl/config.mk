@@ -90,7 +90,7 @@ EXTRA_SHARED_LIBS += \
 endif
 endif
 
-ifeq (,$(filter-out DragonFly FreeBSD Linux NetBSD OpenBSD, $(OS_TARGET)))
+ifeq (,$(filter-out DragonFly FreeBSD Linux NetBSD OpenBSD OS2, $(OS_TARGET)))
 CFLAGS += -std=gnu99
 endif
 
