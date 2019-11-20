@@ -3848,7 +3848,11 @@ ssl_SetDefaultsFromEnvironment(void)
         ssl_keylog_iob = NULL;
         ev = PR_GetEnvSecure("SSLKEYLOGFILE");
         if (ev && ev[0]) {
+#ifdef __OS2__
+            ssl_keylog_iob = fopen(ev, "ab");
+#else
             ssl_keylog_iob = fopen(ev, "a");
+#endif
             if (!ssl_keylog_iob) {
                 SSL_TRACE(("SSL: failed to open key log file"));
             } else {
