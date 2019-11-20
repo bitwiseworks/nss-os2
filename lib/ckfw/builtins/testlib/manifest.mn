@@ -22,4 +22,10 @@ CSRCS =			\
 
 REQUIRES = nspr
 
+include $(CORE_DEPTH)/coreconf/arch.mk
+ifeq ($(OS_TARGET),OS2)
+LIBRARY_NAME = nssckbit
+MAPFILE = $(OBJDIR)/$(LIBRARY_NAME).def
+else
 LIBRARY_NAME = nssckbi-testlib
+endif
