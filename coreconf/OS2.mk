@@ -4,10 +4,11 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 VENDOR?=community
+LIBRARY_VMAJOR=`grep NSS_VMAJOR $(CORE_DEPTH)/lib/nss/nss.h | cut -d" " -f3`
 LIBRARY_VMINOR=`grep NSS_VMINOR $(CORE_DEPTH)/lib/nss/nss.h | cut -d" " -f3`
 LIBRARY_VPATCH=`grep NSS_VPATCH $(CORE_DEPTH)/lib/nss/nss.h | cut -d" " -f3`
 BUILD_INFO=\#\#1\#\# $(shell date +'%d %b %Y %H:%M:%S')     $(shell uname -n)
-BUILDLEVEL_INFO=@\#$(VENDOR):$(LIBRARY_VERSION).$(LIBRARY_VMINOR).$(LIBRARY_VPATCH)\#@$(BUILD_INFO)::::$(LIBRARY_VPATCH)::
+BUILDLEVEL_INFO=@\#$(VENDOR):$(LIBRARY_VMAJOR).$(LIBRARY_VMINOR).$(LIBRARY_VPATCH)\#@$(BUILD_INFO)::::$(LIBRARY_VPATCH)::
 
 MOZ_WIDGET_TOOLKIT = os2
 
