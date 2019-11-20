@@ -25,6 +25,8 @@ LIB_SUFFIX  = a
 DLL_SUFFIX  = dll
 PROG_SUFFIX = .exe
 
+USE_SYSTEM_ZLIB = 1
+ZLIB_LIBS = -lz
 
 CCC			= gcc
 LD			= gcc
